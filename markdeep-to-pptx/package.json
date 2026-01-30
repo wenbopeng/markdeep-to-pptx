@@ -1,0 +1,25 @@
+{
+    "name": "markdeep-to-pptx",
+    "version": "1.0.0",
+    "description": "Convert Markdeep Slides to PowerPoint presentations",
+    "main": "src/index.js",
+    "type": "module",
+    "scripts": {
+        "convert": "node src/index.js",
+        "test": "node src/index.js markdeep-slides-project/Tutorial.html output/Tutorial.pptx"
+    },
+    "keywords": [
+        "markdeep",
+        "slides",
+        "pptx",
+        "powerpoint",
+        "converter"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "playwright": "^1.40.0",
+        "pptxgenjs": "^3.12.0",
+        "sharp": "^0.33.0"
+    }
+}
