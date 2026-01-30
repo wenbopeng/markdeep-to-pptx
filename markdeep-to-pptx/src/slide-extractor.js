@@ -510,6 +510,22 @@ export async function extractSlides(htmlPath) {
             // Extract slide number
             const slideNumber = slide.querySelector('.slide-number');
 
+            // Extract navigation bar chapters
+            const navItems = slide.querySelectorAll('.nav-section-item');
+            let activeChapterIndex = -1;
+            const navChapters = [];
+
+            navItems.forEach((item, idx) => {
+                const text = item.textContent.trim();
+                // Skip TOC button
+                if (!item.classList.contains('toc-button')) {
+                    navChapters.push(text);
+                    if (item.classList.contains('active')) {
+                        activeChapterIndex = navChapters.length - 1;
+                    }
+                }
+            });
+
             extractedSlides.push({
                 index: slideIndex,
                 id: slide.id,
@@ -521,7 +537,9 @@ export async function extractSlides(htmlPath) {
                     isSmallText,
                     isTinyText,
                     chapterLabel: chapterLabel ? chapterLabel.textContent.trim() : null,
-                    slideNumber: slideNumber ? slideNumber.textContent.trim() : null
+                    slideNumber: slideNumber ? slideNumber.textContent.trim() : null,
+                    navChapters: navChapters.length > 0 ? navChapters : null,
+                    activeChapterIndex: activeChapterIndex >= 0 ? activeChapterIndex : null
                 }
             });
         });

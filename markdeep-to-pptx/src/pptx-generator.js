@@ -59,6 +59,9 @@ const COLORS = {
 const SLIDE_WIDTH = 10;  // inches
 const SLIDE_HEIGHT = 5.625; // 16:9
 
+// Navigation bar height
+const NAV_BAR_HEIGHT = 0.35;
+
 /**
  * Create a PowerPoint presentation from extracted slide data
  */
@@ -81,6 +84,11 @@ export async function generatePptx(slideData, outputPath, options = {}) {
         const isH1TitleSlide = slideInfo.metadata?.isH1TitleSlide;
         const isTocSlide = slideInfo.elements.some(e =>
             e.type === 'heading' && e.text?.[0]?.text?.includes('目录'));
+
+        // Add navigation bar for content slides (not first slide or section slides)
+        if (!isFirstSlide && !isH1TitleSlide && slideInfo.metadata?.navChapters) {
+            renderNavBar(slide, slideInfo, pptx);
+        }
 
         // Determine slide type and render accordingly
         if (isFirstSlide) {
@@ -134,6 +142,61 @@ function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide) {
             align: 'right'
         });
     }
+}
+
+/**
+ * Render navigation bar at the top of the slide
+ */
+function renderNavBar(slide, slideInfo, pptx) {
+    const chapters = slideInfo.metadata?.navChapters || [];
+    const activeIndex = slideInfo.metadata?.activeChapterIndex;
+
+    if (chapters.length === 0) return;
+
+    // Background bar
+    slide.addShape(pptx.ShapeType.rect, {
+        x: 0,
+        y: 0,
+        w: SLIDE_WIDTH,
+        h: NAV_BAR_HEIGHT,
+        fill: { color: COLORS.primary },
+        line: { width: 0 }
+    });
+
+    // Calculate tab widths (distribute evenly)
+    const tabWidth = SLIDE_WIDTH / chapters.length;
+
+    chapters.forEach((chapter, idx) => {
+        const x = idx * tabWidth;
+        const isActive = idx === activeIndex;
+
+        // Tab background (slightly lighter for active)
+        if (isActive) {
+            // Add bottom highlight for active tab
+            slide.addShape(pptx.ShapeType.rect, {
+                x: x,
+                y: NAV_BAR_HEIGHT - 0.04,
+                w: tabWidth,
+                h: 0.04,
+                fill: { color: COLORS.white },
+                line: { width: 0 }
+            });
+        }
+
+        // Tab text
+        slide.addText(chapter, {
+            x: x,
+            y: 0,
+            w: tabWidth,
+            h: NAV_BAR_HEIGHT,
+            fontSize: 8,
+            fontFace: FONT_FACE,
+            color: COLORS.white,
+            bold: isActive,
+            align: 'center',
+            valign: 'middle'
+        });
+    });
 }
 
 /**
@@ -248,20 +311,37 @@ function renderContentSlide(slide, slideInfo, pptx) {
     // Find slide title (H2)
     const titleElement = slideInfo.elements.find(e => e.type === 'heading' && e.level === 2);
 
+    // Check if this slide has navbar (to adjust title position)
+    const hasNavBar = slideInfo.metadata?.navChapters?.length > 0;
+    const titleY = hasNavBar ? NAV_BAR_HEIGHT + 0.1 : 0.3;
+
     // Add slide title using extracted position
     if (titleElement) {
         const pos = titleElement.position;
         const titleText = extractPlainText(titleElement.text);
+        const titleWidth = Math.min(pos.w, SLIDE_WIDTH - 0.6);
+        const titleX = Math.max(pos.x, 0.3);
 
         slide.addText(titleText, {
-            x: Math.max(pos.x, 0.3),
-            y: Math.max(pos.y * 0.9, 0.2),  // Slightly adjust for PPTX
-            w: Math.min(pos.w, SLIDE_WIDTH - 0.6),
-            h: 0.6,
+            x: titleX,
+            y: titleY,
+            w: titleWidth,
+            h: 0.5,
             fontSize: FONT_SIZES.slideTitle,
             fontFace: FONT_FACE,
             color: COLORS.titleText,
             bold: true
+        });
+
+        // Add underline below title
+        const underlineY = titleY + 0.55;
+        slide.addShape(pptx.ShapeType.rect, {
+            x: titleX,
+            y: underlineY,
+            w: titleWidth,
+            h: 0.025,
+            fill: { color: COLORS.primary },
+            line: { width: 0 }
         });
     }
 
