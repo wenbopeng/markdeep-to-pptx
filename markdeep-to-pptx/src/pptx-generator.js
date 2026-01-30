@@ -25,6 +25,9 @@ const FONT_SIZES = {
     footer: 9
 };
 
+// Font face - use Microsoft YaHei for Chinese text
+const FONT_FACE = 'Microsoft YaHei';
+
 // Color palette based on Markdeep default theme
 const COLORS = {
     primary: '2980B9',          // Blue (from screenshots)
@@ -114,20 +117,20 @@ function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide) {
             h: 0.25,
             fontSize: FONT_SIZES.footer,
             color: COLORS.primary,
-            fontFace: 'Arial'
+            fontFace: FONT_FACE
         });
     }
 
-    // Slide number (bottom right)
+    // Slide number (bottom right) - wider to prevent line wrap
     if (slideInfo.metadata?.slideNumber) {
         slide.addText(slideInfo.metadata.slideNumber, {
-            x: SLIDE_WIDTH - 0.8,
+            x: SLIDE_WIDTH - 1.2,
             y: SLIDE_HEIGHT - 0.35,
-            w: 0.5,
+            w: 1,
             h: 0.25,
             fontSize: FONT_SIZES.footer,
             color: COLORS.lightText,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             align: 'right'
         });
     }
@@ -151,7 +154,7 @@ function renderTitleSlide(slide, slideInfo, pptx) {
             w: SLIDE_WIDTH - 1,
             h: 1,
             fontSize: FONT_SIZES.titleSlideTitle,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             color: COLORS.primary,
             bold: true,
             align: 'center',
@@ -167,7 +170,7 @@ function renderTitleSlide(slide, slideInfo, pptx) {
             w: SLIDE_WIDTH - 1,
             h: 0.8,
             fontSize: FONT_SIZES.titleSlideSubtitle,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             color: COLORS.lightText,
             align: 'center'
         });
@@ -188,7 +191,7 @@ function renderSectionSlide(slide, slideInfo, pptx) {
             w: SLIDE_WIDTH - 1,
             h: 1,
             fontSize: FONT_SIZES.sectionTitle,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             color: COLORS.primary,
             bold: true,
             align: 'center',
@@ -208,7 +211,7 @@ function renderTocSlide(slide, slideInfo, pptx) {
         w: SLIDE_WIDTH - 1,
         h: 0.6,
         fontSize: FONT_SIZES.slideTitle,
-        fontFace: 'Arial',
+        fontFace: FONT_FACE,
         color: COLORS.primary,
         bold: true
     });
@@ -231,7 +234,7 @@ function renderTocSlide(slide, slideInfo, pptx) {
             y: 1.2,
             w: SLIDE_WIDTH - 2,
             h: SLIDE_HEIGHT - 2,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             valign: 'top'
         });
     }
@@ -256,7 +259,7 @@ function renderContentSlide(slide, slideInfo, pptx) {
             w: Math.min(pos.w, SLIDE_WIDTH - 0.6),
             h: 0.6,
             fontSize: FONT_SIZES.slideTitle,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             color: COLORS.titleText,
             bold: true
         });
@@ -296,38 +299,52 @@ function renderList(slide, element, pptx) {
     const pos = element.position;
     if (!element.items || element.items.length === 0) return;
 
-    // Build list items - each item needs its own addText call or use flat structure
+    // Build list items with explicit bullet characters
     const allTextRuns = [];
+    const bulletChar = element.ordered ? '' : '• ';  // Use explicit bullet character
 
     element.items.forEach((item, idx) => {
-        // Get plain text for this item
-        const itemText = extractPlainText(item.text);
-
-        // Format with bold/italic preserved
-        const runs = item.text.map(run => ({
-            text: run.text || '',
-            options: {
-                bold: run.options?.bold,
-                italic: run.options?.italic,
-                color: run.options?.bold ? COLORS.primary : COLORS.bodyText,
-                fontSize: FONT_SIZES.listItem
-            }
-        }));
-
-        // Add bullet to first run of each item
-        if (runs.length > 0) {
-            runs[0].options.bullet = {
-                type: element.ordered ? 'number' : 'bullet',
-                color: COLORS.bulletColor
-            };
+        // Add bullet character or number prefix
+        if (element.ordered) {
+            allTextRuns.push({
+                text: `${idx + 1}. `,
+                options: {
+                    color: COLORS.bulletColor,
+                    fontSize: FONT_SIZES.listItem,
+                    bold: false
+                }
+            });
+        } else {
+            allTextRuns.push({
+                text: bulletChar,
+                options: {
+                    color: COLORS.bulletColor,
+                    fontSize: FONT_SIZES.listItem,
+                    bold: false
+                }
+            });
         }
+
+        // Format each text run with bold/italic preserved
+        item.text.forEach((run, runIdx) => {
+            allTextRuns.push({
+                text: run.text || '',
+                options: {
+                    bold: run.options?.bold,
+                    italic: run.options?.italic,
+                    color: run.options?.bold ? COLORS.primary : COLORS.bodyText,
+                    fontSize: FONT_SIZES.listItem
+                }
+            });
+        });
 
         // Add line break after each item except last
-        if (idx < element.items.length - 1 && runs.length > 0) {
-            runs[runs.length - 1].options.breakLine = true;
+        if (idx < element.items.length - 1) {
+            allTextRuns.push({
+                text: '\n',
+                options: { fontSize: FONT_SIZES.listItem }
+            });
         }
-
-        allTextRuns.push(...runs);
     });
 
     slide.addText(allTextRuns, {
@@ -335,7 +352,7 @@ function renderList(slide, element, pptx) {
         y: Math.max(pos.y, 0.9),
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: Math.min(pos.h, SLIDE_HEIGHT - pos.y - 0.5),
-        fontFace: 'Arial',
+        fontFace: FONT_FACE,
         valign: 'top',
         paraSpaceAfter: 8
     });
@@ -353,7 +370,7 @@ function renderParagraph(slide, element, pptx) {
         y: pos.y,
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: Math.max(pos.h, 0.4),
-        fontFace: 'Arial',
+        fontFace: FONT_FACE,
         valign: 'top'
     });
 }
@@ -406,7 +423,7 @@ function renderAdmonition(slide, element, pptx) {
             w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.4,
             h: 0.3,
             fontSize: FONT_SIZES.smallText,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             bold: true,
             color: colors.text
         });
@@ -421,7 +438,7 @@ function renderAdmonition(slide, element, pptx) {
             w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.4,
             h: height - (contentY - pos.y) - 0.1,
             fontSize: FONT_SIZES.smallText,
-            fontFace: 'Arial',
+            fontFace: FONT_FACE,
             color: colors.text,
             valign: 'top'
         });
@@ -457,7 +474,7 @@ function renderTable(slide, element, pptx) {
         y: pos.y,
         w: tableWidth,
         colW: Array(colCount).fill(tableWidth / colCount),
-        fontFace: 'Arial',
+        fontFace: FONT_FACE,
         border: { color: COLORS.lightText, pt: 0.5 }
     });
 }
