@@ -458,8 +458,34 @@ function renderContentSlide(slide, slideInfo, pptx) {
             case 'blockquote':
                 renderBlockquote(slide, element, pptx);
                 break;
+            case 'shape':
+                renderShape(slide, element, pptx);
+                break;
         }
     }
+}
+
+/**
+ * Render background shape (used for column backgrounds)
+ */
+function renderShape(slide, element, pptx) {
+    const pos = element.position;
+
+    // Add a bit of extra height to fully cover text
+    const extraHeight = 0.15;
+
+    slide.addShape(pptx.ShapeType.roundRect, {
+        x: pos.x,
+        y: pos.y,
+        w: pos.w,
+        h: pos.h + extraHeight,
+        fill: element.fill ? { color: element.fill } : { color: 'F5F5F5' },
+        line: element.border ? {
+            color: element.border.color,
+            width: element.border.width
+        } : { type: 'none' },
+        rectRadius: 0.03
+    });
 }
 
 /**
@@ -478,15 +504,20 @@ function renderSubheading(slide, element, pptx) {
     };
     const fontSize = fontSizeMap[element.level] || FONT_SIZES.body;
 
-    slide.addText(text, {
+    // Use text runs for proper bold styling
+    slide.addText([{
+        text: text,
+        options: {
+            fontSize: fontSize,
+            fontFace: FONT_FACE,
+            color: COLORS.primary,
+            bold: true
+        }
+    }], {
         x: Math.max(pos.x, 0.5),
         y: pos.y,
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
-        h: Math.max(pos.h, 0.4),
-        fontSize: fontSize,
-        fontFace: FONT_FACE,
-        color: COLORS.primary,
-        bold: true,
+        h: 0.35,  // Fixed smaller height
         valign: 'top'
     });
 }
@@ -497,6 +528,9 @@ function renderSubheading(slide, element, pptx) {
 function renderList(slide, element, pptx) {
     const pos = element.position;
     if (!element.items || element.items.length === 0) return;
+
+    // Use smaller font for column content
+    const fontSize = pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.listItem;
 
     // Build list items with explicit bullet characters and indentation
     const allTextRuns = [];
@@ -515,7 +549,7 @@ function renderList(slide, element, pptx) {
                 text: `${indent}${topLevelIndex}. `,
                 options: {
                     color: COLORS.bulletColor,
-                    fontSize: FONT_SIZES.listItem,
+                    fontSize: fontSize,
                     bold: false
                 }
             });
@@ -525,7 +559,7 @@ function renderList(slide, element, pptx) {
                 text: `${indent}• `,
                 options: {
                     color: COLORS.bulletColor,
-                    fontSize: FONT_SIZES.listItem,
+                    fontSize: fontSize,
                     bold: false
                 }
             });
@@ -539,7 +573,7 @@ function renderList(slide, element, pptx) {
                     bold: run.options?.bold,
                     italic: run.options?.italic,
                     color: run.options?.bold ? COLORS.primary : COLORS.bodyText,
-                    fontSize: FONT_SIZES.listItem
+                    fontSize: fontSize
                 }
             });
         });
@@ -548,7 +582,7 @@ function renderList(slide, element, pptx) {
         if (idx < element.items.length - 1) {
             allTextRuns.push({
                 text: '\n',
-                options: { fontSize: FONT_SIZES.listItem }
+                options: { fontSize: fontSize }
             });
         }
     });
@@ -570,7 +604,9 @@ function renderList(slide, element, pptx) {
  */
 function renderParagraph(slide, element, pptx) {
     const pos = element.position;
-    const textRuns = formatTextRuns(element.text, FONT_SIZES.body);
+    // Use smaller font for column content
+    const fontSize = pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.body;
+    const textRuns = formatTextRuns(element.text, fontSize);
 
     slide.addText(textRuns, {
         x: Math.max(pos.x, 0.5),
@@ -624,18 +660,38 @@ function renderAdmonition(slide, element, pptx) {
 
     // Title (if present)
     let contentY = pos.y + 0.12;
+    const titleX = Math.max(pos.x, 0.5) + 0.2;
+    const titleW = Math.min(pos.w, SLIDE_WIDTH - 1) - 0.4;
+
     if (element.title) {
-        slide.addText(element.title, {
-            x: Math.max(pos.x, 0.5) + 0.2,
+        // Use text runs format for proper bold styling
+        slide.addText([{
+            text: element.title,
+            options: {
+                fontSize: FONT_SIZES.body,
+                fontFace: FONT_FACE,
+                bold: true,
+                color: colors.text
+            }
+        }], {
+            x: titleX,
             y: contentY,
-            w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.4,
-            h: 0.3,
-            fontSize: FONT_SIZES.smallText,
-            fontFace: FONT_FACE,
-            bold: true,
-            color: colors.text
+            w: titleW,
+            h: 0.35,
+            valign: 'top'
         });
-        contentY += 0.35;
+
+        // Underline below title
+        slide.addShape(pptx.ShapeType.rect, {
+            x: titleX,
+            y: contentY + 0.32,
+            w: titleW * 0.3,  // Partial underline for better visual
+            h: 0.02,
+            fill: { color: colors.border },
+            line: { type: 'none' }
+        });
+
+        contentY += 0.45;
     }
 
     // Content
@@ -648,7 +704,8 @@ function renderAdmonition(slide, element, pptx) {
             fontSize: FONT_SIZES.smallText,
             fontFace: FONT_FACE,
             color: colors.text,
-            valign: 'top'
+            valign: 'top',
+            lineSpacingMultiple: 1.5
         });
     }
 }

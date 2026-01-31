@@ -186,9 +186,10 @@ export async function extractSlides(htmlPath) {
             }
 
             // Process all content elements
-            function processElement(el, depth = 0) {
+            function processElement(el, depth = 0, inColumn = false) {
                 const tagName = el.tagName;
                 const position = getPosition(el);
+                position.inColumn = inColumn;  // Mark if inside a column
 
                 // Skip invisible or zero-size elements
                 if (position.w === 0 || position.h === 0) return;
@@ -310,15 +311,15 @@ export async function extractSlides(htmlPath) {
                 // Handle lists (UL, OL)
                 if (tagName === 'UL' || tagName === 'OL') {
                     const items = [];
-                    
+
                     // Recursive function to extract list items with nesting level
                     function extractListItems(listEl, level = 0) {
                         const listItems = listEl.querySelectorAll(':scope > li');
-                        
+
                         listItems.forEach(li => {
                             // Extract text from this LI (excluding nested lists)
                             const itemRuns = [];
-                            
+
                             li.childNodes.forEach(child => {
                                 if (child.nodeType === Node.TEXT_NODE) {
                                     const text = child.textContent.trim();
@@ -333,7 +334,7 @@ export async function extractSlides(htmlPath) {
                                     }
                                 }
                             });
-                            
+
                             // Check for highlight classes
                             const highlightSpan = li.querySelector('[class*="highlight-"]');
                             if (highlightSpan) {
@@ -351,7 +352,7 @@ export async function extractSlides(htmlPath) {
                                     }
                                 }
                             }
-                            
+
                             // Only add if there's content
                             if (itemRuns.length > 0) {
                                 items.push({
@@ -359,7 +360,7 @@ export async function extractSlides(htmlPath) {
                                     level: level
                                 });
                             }
-                            
+
                             // Process nested lists
                             const nestedLists = li.querySelectorAll(':scope > ul, :scope > ol');
                             nestedLists.forEach(nestedList => {
@@ -367,7 +368,7 @@ export async function extractSlides(htmlPath) {
                             });
                         });
                     }
-                    
+
                     extractListItems(el, 0);
 
                     elements.push({
@@ -397,13 +398,34 @@ export async function extractSlides(htmlPath) {
                     const titleEl = el.querySelector('.admonitionTitle');
                     const title = titleEl ? titleEl.textContent.trim() : null;
 
-                    // Get content (everything except title)
-                    const content = [];
-                    el.childNodes.forEach(child => {
-                        if (child !== titleEl && child.textContent.trim()) {
-                            content.push(child.textContent.trim());
+                    // Get content (everything except title), preserving list formatting
+                    const contentParts = [];
+
+                    function extractAdmonitionContent(node) {
+                        if (node === titleEl) return;
+
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            const text = node.textContent.trim();
+                            if (text) contentParts.push(text);
+                        } else if (node.nodeType === Node.ELEMENT_NODE) {
+                            if (node.tagName === 'UL' || node.tagName === 'OL') {
+                                // Handle lists with bullet characters
+                                const items = node.querySelectorAll(':scope > li');
+                                items.forEach((li, idx) => {
+                                    const prefix = node.tagName === 'OL' ? `${idx + 1}. ` : '• ';
+                                    contentParts.push(prefix + li.textContent.trim());
+                                });
+                            } else if (node.tagName === 'P') {
+                                const text = node.textContent.trim();
+                                if (text) contentParts.push(text);
+                            } else {
+                                // Recurse for other elements
+                                node.childNodes.forEach(child => extractAdmonitionContent(child));
+                            }
                         }
-                    });
+                    }
+
+                    el.childNodes.forEach(child => extractAdmonitionContent(child));
 
                     // Color mapping for admonition types
                     const colorMap = {
@@ -420,7 +442,7 @@ export async function extractSlides(htmlPath) {
                         type: 'admonition',
                         admonitionType: type,
                         title,
-                        content: content.join('\n'),
+                        content: contentParts.join('\n'),
                         position,
                         colors
                     });
@@ -480,10 +502,41 @@ export async function extractSlides(htmlPath) {
                     const leftCol = el.querySelector('.column-left');
                     const rightCol = el.querySelector('.column-right');
 
+                    // Helper to add column background
+                    function addColumnBackground(col) {
+                        if (!col) return;
+                        const colRect = col.getBoundingClientRect();
+                        const colComputed = window.getComputedStyle(col);
+                        const hasBg = colComputed.backgroundColor !== 'rgba(0, 0, 0, 0)';
+                        const hasBorder = parseFloat(colComputed.borderWidth) > 0;
+
+                        if (hasBg || hasBorder) {
+                            elements.push({
+                                type: 'shape',
+                                position: {
+                                    x: (colRect.left - parentRect.left) * scaleX,
+                                    y: (colRect.top - parentRect.top) * scaleY,
+                                    w: colRect.width * scaleX,
+                                    h: colRect.height * scaleY
+                                },
+                                fill: hasBg ? rgbToHex(colComputed.backgroundColor) : null,
+                                border: hasBorder ? {
+                                    color: rgbToHex(colComputed.borderColor),
+                                    width: parseFloat(colComputed.borderWidth) * 0.75
+                                } : null,
+                                borderRadius: parseFloat(colComputed.borderRadius) || 0
+                            });
+                        }
+                    }
+
+                    // Add backgrounds first
+                    addColumnBackground(leftCol);
+                    addColumnBackground(rightCol);
+
                     if (leftCol) {
                         leftCol.childNodes.forEach(child => {
                             if (child.nodeType === Node.ELEMENT_NODE) {
-                                processElement(child, depth + 1);
+                                processElement(child, depth + 1, true);  // Mark as inside column
                             }
                         });
                     }
@@ -491,7 +544,7 @@ export async function extractSlides(htmlPath) {
                     if (rightCol) {
                         rightCol.childNodes.forEach(child => {
                             if (child.nodeType === Node.ELEMENT_NODE) {
-                                processElement(child, depth + 1);
+                                processElement(child, depth + 1, true);  // Mark as inside column
                             }
                         });
                     }
@@ -518,10 +571,10 @@ export async function extractSlides(htmlPath) {
                         });
                     }
 
-                    // Process children
+                    // Process children, preserving inColumn status
                     el.childNodes.forEach(child => {
                         if (child.nodeType === Node.ELEMENT_NODE) {
-                            processElement(child, depth + 1);
+                            processElement(child, depth + 1, inColumn);
                         }
                     });
                     return;
