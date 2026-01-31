@@ -310,34 +310,65 @@ export async function extractSlides(htmlPath) {
                 // Handle lists (UL, OL)
                 if (tagName === 'UL' || tagName === 'OL') {
                     const items = [];
-                    const listItems = el.querySelectorAll(':scope > li');
-
-                    listItems.forEach(li => {
-                        const itemRuns = extractTextWithFormatting(li);
-
-                        // Check for highlight classes
-                        const highlightSpan = li.querySelector('[class*="highlight-"]');
-                        if (highlightSpan) {
-                            const highlightClass = Array.from(highlightSpan.classList).find(c => c.startsWith('highlight-'));
-                            if (highlightClass) {
-                                const colorMap = {
-                                    'highlight-red': 'C0392B',
-                                    'highlight-orange': 'E67E22',
-                                    'highlight-green': '27AE60',
-                                    'highlight-blue': '2980B9',
-                                    'highlight-purple': '8E44AD'
-                                };
-                                if (colorMap[highlightClass]) {
-                                    itemRuns.forEach(run => run.options.highlightColor = colorMap[highlightClass]);
+                    
+                    // Recursive function to extract list items with nesting level
+                    function extractListItems(listEl, level = 0) {
+                        const listItems = listEl.querySelectorAll(':scope > li');
+                        
+                        listItems.forEach(li => {
+                            // Extract text from this LI (excluding nested lists)
+                            const itemRuns = [];
+                            
+                            li.childNodes.forEach(child => {
+                                if (child.nodeType === Node.TEXT_NODE) {
+                                    const text = child.textContent.trim();
+                                    if (text) {
+                                        itemRuns.push({ text, options: {} });
+                                    }
+                                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                                    // Skip nested UL/OL - will process separately
+                                    if (child.tagName !== 'UL' && child.tagName !== 'OL') {
+                                        const runs = extractTextWithFormatting(child);
+                                        itemRuns.push(...runs);
+                                    }
+                                }
+                            });
+                            
+                            // Check for highlight classes
+                            const highlightSpan = li.querySelector('[class*="highlight-"]');
+                            if (highlightSpan) {
+                                const highlightClass = Array.from(highlightSpan.classList).find(c => c.startsWith('highlight-'));
+                                if (highlightClass) {
+                                    const colorMap = {
+                                        'highlight-red': 'C0392B',
+                                        'highlight-orange': 'E67E22',
+                                        'highlight-green': '27AE60',
+                                        'highlight-blue': '2980B9',
+                                        'highlight-purple': '8E44AD'
+                                    };
+                                    if (colorMap[highlightClass]) {
+                                        itemRuns.forEach(run => run.options.highlightColor = colorMap[highlightClass]);
+                                    }
                                 }
                             }
-                        }
-
-                        items.push({
-                            text: itemRuns,
-                            level: 0 // TODO: handle nested lists
+                            
+                            // Only add if there's content
+                            if (itemRuns.length > 0) {
+                                items.push({
+                                    text: itemRuns,
+                                    level: level
+                                });
+                            }
+                            
+                            // Process nested lists
+                            const nestedLists = li.querySelectorAll(':scope > ul, :scope > ol');
+                            nestedLists.forEach(nestedList => {
+                                extractListItems(nestedList, level + 1);
+                            });
                         });
-                    });
+                    }
+                    
+                    extractListItems(el, 0);
 
                     elements.push({
                         type: 'list',

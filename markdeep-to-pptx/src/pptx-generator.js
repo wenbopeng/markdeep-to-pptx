@@ -267,38 +267,74 @@ function renderSectionSlide(slide, slideInfo, pptx) {
  * Render TOC slide
  */
 function renderTocSlide(slide, slideInfo, pptx) {
-    // Title
+    // Check if this slide has navbar
+    const hasNavBar = slideInfo.metadata?.navChapters?.length > 0;
+
+    // Add navigation bar if present
+    if (hasNavBar) {
+        renderNavBar(slide, slideInfo, pptx);
+    }
+
+    const titleY = hasNavBar ? NAV_BAR_HEIGHT + 0.1 : 0.3;
+
+    // Title - "目录" with underline
+    const titleX = 0.5;
+    const titleWidth = 2;
+
     slide.addText('目录', {
-        x: 0.5,
-        y: 0.3,
-        w: SLIDE_WIDTH - 1,
-        h: 0.6,
+        x: titleX,
+        y: titleY,
+        w: titleWidth,
+        h: 0.5,
         fontSize: FONT_SIZES.slideTitle,
         fontFace: FONT_FACE,
         color: COLORS.primary,
         bold: true
     });
 
-    // TOC list
+    // TOC list - use text runs with explicit line breaks
     const listElement = slideInfo.elements.find(e => e.type === 'list');
     if (listElement && listElement.items) {
-        const items = listElement.items.map((item, idx) => ({
-            text: `${idx + 1}. ${extractPlainText(item.text)}`,
-            options: {
-                fontSize: FONT_SIZES.body + 2,
-                color: COLORS.bodyText,
-                bullet: false,
-                paraSpaceAfter: 14
-            }
-        }));
+        const textRuns = [];
 
-        slide.addText(items, {
-            x: 1,
-            y: 1.2,
-            w: SLIDE_WIDTH - 2,
-            h: SLIDE_HEIGHT - 2,
+        listElement.items.forEach((item, idx) => {
+            // Add number prefix
+            textRuns.push({
+                text: `${idx + 1}. `,
+                options: {
+                    fontSize: FONT_SIZES.body + 2,
+                    color: COLORS.primary,
+                    bold: true
+                }
+            });
+
+            // Add item text
+            textRuns.push({
+                text: extractPlainText(item.text),
+                options: {
+                    fontSize: FONT_SIZES.body + 2,
+                    color: COLORS.bodyText,
+                    bold: false
+                }
+            });
+
+            // Add line break after each item except last
+            if (idx < listElement.items.length - 1) {
+                textRuns.push({
+                    text: '\n',
+                    options: { fontSize: FONT_SIZES.body + 2 }
+                });
+            }
+        });
+
+        slide.addText(textRuns, {
+            x: 1.5,
+            y: titleY + 0.8,
+            w: SLIDE_WIDTH - 3,
+            h: SLIDE_HEIGHT - titleY - 1.5,
             fontFace: FONT_FACE,
-            valign: 'top'
+            valign: 'top',
+            lineSpacing: 32
         });
     }
 }
@@ -379,15 +415,21 @@ function renderList(slide, element, pptx) {
     const pos = element.position;
     if (!element.items || element.items.length === 0) return;
 
-    // Build list items with explicit bullet characters
+    // Build list items with explicit bullet characters and indentation
     const allTextRuns = [];
-    const bulletChar = element.ordered ? '' : '• ';  // Use explicit bullet character
+    const INDENT_SIZE = '    ';  // 4 spaces per level
 
     element.items.forEach((item, idx) => {
-        // Add bullet character or number prefix
-        if (element.ordered) {
+        const level = item.level || 0;
+        const indent = INDENT_SIZE.repeat(level);
+
+        // Add indentation + bullet character or number prefix
+        if (element.ordered && level === 0) {
+            // Only number top-level items in ordered lists
+            const topLevelIndex = element.items.slice(0, idx + 1)
+                .filter(i => (i.level || 0) === 0).length;
             allTextRuns.push({
-                text: `${idx + 1}. `,
+                text: `${indent}${topLevelIndex}. `,
                 options: {
                     color: COLORS.bulletColor,
                     fontSize: FONT_SIZES.listItem,
@@ -395,8 +437,9 @@ function renderList(slide, element, pptx) {
                 }
             });
         } else {
+            // Use bullet for unordered lists and nested items
             allTextRuns.push({
-                text: bulletChar,
+                text: `${indent}• `,
                 options: {
                     color: COLORS.bulletColor,
                     fontSize: FONT_SIZES.listItem,
@@ -406,7 +449,7 @@ function renderList(slide, element, pptx) {
         }
 
         // Format each text run with bold/italic preserved
-        item.text.forEach((run, runIdx) => {
+        item.text.forEach((run) => {
             allTextRuns.push({
                 text: run.text || '',
                 options: {
