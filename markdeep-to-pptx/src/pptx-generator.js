@@ -101,8 +101,8 @@ export async function generatePptx(slideData, outputPath, options = {}) {
             renderContentSlide(slide, slideInfo, pptx);
         }
 
-        // Add footer elements (chapter label and slide number)
-        addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide);
+        // Add footer elements (chapter label, slide number, and progress bar)
+        addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, slideData.slides.length);
     }
 
     await pptx.writeFile({ fileName: outputPath });
@@ -111,16 +111,33 @@ export async function generatePptx(slideData, outputPath, options = {}) {
 }
 
 /**
- * Add footer with chapter label and slide number
+ * Add footer with chapter label, slide number, and progress bar
  */
-function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide) {
+function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, totalSlides) {
+    // Progress bar at the very bottom (shown on ALL slides)
+    const progressBarHeight = 0.04;
+    const currentSlide = slideInfo.index + 1;
+    const progress = currentSlide / totalSlides;
+    const progressWidth = SLIDE_WIDTH * progress;
+
+    // Progress bar (blue, shows current progress)
+    slide.addShape(pptx.ShapeType.rect, {
+        x: 0,
+        y: SLIDE_HEIGHT - progressBarHeight,
+        w: progressWidth,
+        h: progressBarHeight,
+        fill: { color: COLORS.primary },
+        line: { type: 'none' }
+    });
+
+    // Skip chapter label and slide number for title/section slides
     if (isFirstSlide || isH1TitleSlide) return;
 
     // Chapter label (bottom left)
     if (slideInfo.metadata?.chapterLabel) {
         slide.addText(slideInfo.metadata.chapterLabel, {
             x: 0.3,
-            y: SLIDE_HEIGHT - 0.35,
+            y: SLIDE_HEIGHT - 0.4,
             w: 3,
             h: 0.25,
             fontSize: FONT_SIZES.footer,
@@ -133,7 +150,7 @@ function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide) {
     if (slideInfo.metadata?.slideNumber) {
         slide.addText(slideInfo.metadata.slideNumber, {
             x: SLIDE_WIDTH - 1.2,
-            y: SLIDE_HEIGHT - 0.35,
+            y: SLIDE_HEIGHT - 0.4,
             w: 1,
             h: 0.25,
             fontSize: FONT_SIZES.footer,
