@@ -160,7 +160,7 @@ function renderNavBar(slide, slideInfo, pptx) {
         w: SLIDE_WIDTH,
         h: NAV_BAR_HEIGHT,
         fill: { color: COLORS.primary },
-        line: { width: 0 }
+        line: { type: 'none' }
     });
 
     // Calculate tab widths (distribute evenly)
@@ -179,7 +179,7 @@ function renderNavBar(slide, slideInfo, pptx) {
                 w: tabWidth,
                 h: 0.04,
                 fill: { color: COLORS.white },
-                line: { width: 0 }
+                line: { type: 'none' }
             });
         }
 
@@ -377,7 +377,7 @@ function renderContentSlide(slide, slideInfo, pptx) {
             w: titleWidth,
             h: 0.025,
             fill: { color: COLORS.primary },
-            line: { width: 0 }
+            line: { type: 'none' }
         });
     }
 
@@ -523,7 +523,7 @@ function renderAdmonition(slide, element, pptx) {
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: height,
         fill: { color: colors.bg },
-        line: { color: colors.border, width: 1 },
+        line: { type: 'none' },
         rectRadius: 0.03
     });
 
@@ -534,7 +534,7 @@ function renderAdmonition(slide, element, pptx) {
         w: 0.06,
         h: height,
         fill: { color: colors.border },
-        line: { width: 0 }
+        line: { type: 'none' }
     });
 
     // Title (if present)
@@ -616,7 +616,7 @@ function renderCode(slide, element, pptx) {
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: height,
         fill: { color: 'F5F5F5' },
-        line: { color: 'DDDDDD', width: 1 }
+        line: { type: 'none' }
     });
 
     // Code text
@@ -646,7 +646,7 @@ function renderBlockquote(slide, element, pptx) {
         w: 0.04,
         h: height,
         fill: { color: COLORS.primary },
-        line: { width: 0 }
+        line: { type: 'none' }
     });
 
     // Quote text
