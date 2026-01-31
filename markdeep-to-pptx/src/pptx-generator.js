@@ -436,6 +436,10 @@ function renderContentSlide(slide, slideInfo, pptx) {
         if (element.type === 'heading' && element.level <= 2) continue; // Skip H1/H2
 
         switch (element.type) {
+            case 'heading':
+                // Render H3+ as section subheadings
+                renderSubheading(slide, element, pptx);
+                break;
             case 'list':
                 renderList(slide, element, pptx);
                 break;
@@ -456,6 +460,35 @@ function renderContentSlide(slide, slideInfo, pptx) {
                 break;
         }
     }
+}
+
+/**
+ * Render H3+ subheadings
+ */
+function renderSubheading(slide, element, pptx) {
+    const pos = element.position;
+    const text = extractPlainText(element.text);
+
+    // Font size decreases for deeper levels
+    const fontSizeMap = {
+        3: FONT_SIZES.body + 2,  // H3: slightly larger than body
+        4: FONT_SIZES.body,      // H4: same as body
+        5: FONT_SIZES.smallText, // H5: smaller
+        6: FONT_SIZES.smallText  // H6: smaller
+    };
+    const fontSize = fontSizeMap[element.level] || FONT_SIZES.body;
+
+    slide.addText(text, {
+        x: Math.max(pos.x, 0.5),
+        y: pos.y,
+        w: Math.min(pos.w, SLIDE_WIDTH - 1),
+        h: Math.max(pos.h, 0.4),
+        fontSize: fontSize,
+        fontFace: FONT_FACE,
+        color: COLORS.primary,
+        bold: true,
+        valign: 'top'
+    });
 }
 
 /**
