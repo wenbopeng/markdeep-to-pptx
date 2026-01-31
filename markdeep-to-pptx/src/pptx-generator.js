@@ -510,7 +510,8 @@ function renderList(slide, element, pptx) {
         h: Math.min(pos.h, SLIDE_HEIGHT - pos.y - 0.5),
         fontFace: FONT_FACE,
         valign: 'top',
-        paraSpaceAfter: 8
+        paraSpaceAfter: 8,
+        lineSpacingMultiple: 1.5
     });
 }
 
@@ -527,7 +528,8 @@ function renderParagraph(slide, element, pptx) {
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: Math.max(pos.h, 0.4),
         fontFace: FONT_FACE,
-        valign: 'top'
+        valign: 'top',
+        lineSpacingMultiple: 1.5
     });
 }
 
