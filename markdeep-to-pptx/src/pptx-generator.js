@@ -146,6 +146,8 @@ function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide) {
 
 /**
  * Render navigation bar at the top of the slide
+ * Layout: [目录] on left (white bg), chapter tabs right-aligned with auto width
+ * Active tab: inverted colors (white background, blue text)
  */
 function renderNavBar(slide, slideInfo, pptx) {
     const chapters = slideInfo.metadata?.navChapters || [];
@@ -163,21 +165,50 @@ function renderNavBar(slide, slideInfo, pptx) {
         line: { type: 'none' }
     });
 
-    // Calculate tab widths (distribute evenly)
-    const tabWidth = SLIDE_WIDTH / chapters.length;
+    // "目录" button on left (white background)
+    const tocWidth = 0.5;
+    slide.addShape(pptx.ShapeType.rect, {
+        x: 0,
+        y: 0,
+        w: tocWidth,
+        h: NAV_BAR_HEIGHT,
+        fill: { color: COLORS.white },
+        line: { type: 'none' }
+    });
+    slide.addText('目录', {
+        x: 0,
+        y: 0,
+        w: tocWidth,
+        h: NAV_BAR_HEIGHT,
+        fontSize: 8,
+        fontFace: FONT_FACE,
+        color: COLORS.primary,
+        align: 'center',
+        valign: 'middle'
+    });
+
+    // Calculate tab widths based on text length (approximate)
+    const charWidth = 0.12;  // Approximate width per Chinese character
+    const tabPadding = 0.15;  // Padding on each side
+
+    // Calculate each tab width
+    const tabWidths = chapters.map(ch => ch.length * charWidth + tabPadding * 2);
+    const totalTabWidth = tabWidths.reduce((a, b) => a + b, 0);
+
+    // Start from right side
+    let currentX = SLIDE_WIDTH - totalTabWidth;
 
     chapters.forEach((chapter, idx) => {
-        const x = idx * tabWidth;
         const isActive = idx === activeIndex;
+        const tabWidth = tabWidths[idx];
 
-        // Tab background (slightly lighter for active)
+        // Tab background - white for active, transparent for others
         if (isActive) {
-            // Add bottom highlight for active tab
             slide.addShape(pptx.ShapeType.rect, {
-                x: x,
-                y: NAV_BAR_HEIGHT - 0.04,
+                x: currentX,
+                y: 0,
                 w: tabWidth,
-                h: 0.04,
+                h: NAV_BAR_HEIGHT,
                 fill: { color: COLORS.white },
                 line: { type: 'none' }
             });
@@ -185,17 +216,19 @@ function renderNavBar(slide, slideInfo, pptx) {
 
         // Tab text
         slide.addText(chapter, {
-            x: x,
+            x: currentX,
             y: 0,
             w: tabWidth,
             h: NAV_BAR_HEIGHT,
             fontSize: 8,
             fontFace: FONT_FACE,
-            color: COLORS.white,
-            bold: isActive,
+            color: isActive ? COLORS.primary : COLORS.white,
+            bold: false,
             align: 'center',
             valign: 'middle'
         });
+
+        currentX += tabWidth;
     });
 }
 
