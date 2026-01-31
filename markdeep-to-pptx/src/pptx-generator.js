@@ -704,8 +704,7 @@ function renderAdmonition(slide, element, pptx) {
             fontSize: FONT_SIZES.smallText,
             fontFace: FONT_FACE,
             color: colors.text,
-            valign: 'top',
-            lineSpacingMultiple: 1.5
+            valign: 'top'
         });
     }
 }
