@@ -30,29 +30,29 @@ const FONT_FACE = 'Microsoft YaHei';
 
 // Color palette based on Markdeep default theme
 const COLORS = {
-    primary: '2980B9',          // Blue (from screenshots)
-    titleText: '2980B9',        // Blue title
+    primary: '034295',          // Blue (from screenshots)
+    titleText: '034295',        // Blue title
     bodyText: '333333',         // Dark gray
     lightText: '666666',        // Light gray
     white: 'FFFFFF',
     // Admonition colors
-    noteBackground: 'E3F2FD',
-    noteBorder: '2196F3',
-    noteText: '1565C0',
-    tipBackground: 'E8F5E9',
-    tipBorder: '4CAF50',
-    tipText: '2E7D32',
-    warningBackground: 'FFF8E1',
-    warningBorder: 'FFC107',
-    warningText: 'F57F17',
-    errorBackground: 'FFEBEE',
-    errorBorder: 'F44336',
-    errorText: 'C62828',
-    questionBackground: 'FFF3E0',
-    questionBorder: 'FF9800',
-    questionText: 'E65100',
+    noteBackground: 'd6eaf8',
+    noteBorder: '7fb3d3',
+    noteText: '1a5276',
+    tipBackground: 'dcfad9',
+    tipBorder: 'a2f29a',
+    tipText: '1e8449',
+    warningBackground: 'ffe9d5',
+    warningBorder: 'ffc78f',
+    warningText: 'a04000',
+    errorBackground: 'fde8e8',
+    errorBorder: 'f1948a',
+    errorText: '922b21',
+    questionBackground: 'f5eef8',
+    questionBorder: '9b59b6',
+    questionText: '6c3483',
     // Bullet point color
-    bulletColor: '2980B9'
+    bulletColor: '034295'
 };
 
 // Standard slide dimensions
@@ -61,6 +61,9 @@ const SLIDE_HEIGHT = 5.625; // 16:9
 
 // Navigation bar height
 const NAV_BAR_HEIGHT = 0.35;
+
+// Top padding offset inside column backgrounds (HTML padding-top → PPTX gap compensation)
+const COLUMN_CONTENT_Y_OFFSET = 0.1;
 
 /**
  * Create a PowerPoint presentation from extracted slide data
@@ -86,7 +89,7 @@ export async function generatePptx(slideData, outputPath, options = {}) {
             e.type === 'heading' && e.text?.[0]?.text?.includes('目录'));
 
         // Add navigation bar for content slides (not first slide or section slides)
-        if (!isFirstSlide && !isH1TitleSlide && slideInfo.metadata?.navChapters) {
+        if (!options.noNavbar && !isFirstSlide && !isH1TitleSlide && slideInfo.metadata?.navChapters) {
             renderNavBar(slide, slideInfo, pptx);
         }
 
@@ -102,7 +105,7 @@ export async function generatePptx(slideData, outputPath, options = {}) {
         }
 
         // Add footer elements (chapter label, slide number, and progress bar)
-        addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, slideData.slides.length);
+        addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, slideData.slides.length, options);
     }
 
     await pptx.writeFile({ fileName: outputPath });
@@ -113,28 +116,29 @@ export async function generatePptx(slideData, outputPath, options = {}) {
 /**
  * Add footer with chapter label, slide number, and progress bar
  */
-function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, totalSlides) {
+function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, totalSlides, options = {}) {
     // Progress bar at the very bottom (shown on ALL slides)
-    const progressBarHeight = 0.04;
-    const currentSlide = slideInfo.index + 1;
-    const progress = currentSlide / totalSlides;
-    const progressWidth = SLIDE_WIDTH * progress;
+    if (!options.noProgressBar) {
+        const progressBarHeight = 0.04;
+        const currentSlide = slideInfo.index + 1;
+        const progress = currentSlide / totalSlides;
+        const progressWidth = SLIDE_WIDTH * progress;
 
-    // Progress bar (blue, shows current progress)
-    slide.addShape(pptx.ShapeType.rect, {
-        x: 0,
-        y: SLIDE_HEIGHT - progressBarHeight,
-        w: progressWidth,
-        h: progressBarHeight,
-        fill: { color: COLORS.primary },
-        line: { type: 'none' }
-    });
+        slide.addShape(pptx.ShapeType.rect, {
+            x: 0,
+            y: SLIDE_HEIGHT - progressBarHeight,
+            w: progressWidth,
+            h: progressBarHeight,
+            fill: { color: COLORS.primary },
+            line: { type: 'none' }
+        });
+    }
 
     // Skip chapter label and slide number for title/section slides
     if (isFirstSlide || isH1TitleSlide) return;
 
     // Chapter label (bottom left)
-    if (slideInfo.metadata?.chapterLabel) {
+    if (!options.noChapter && slideInfo.metadata?.chapterLabel) {
         slide.addText(slideInfo.metadata.chapterLabel, {
             x: 0.3,
             y: SLIDE_HEIGHT - 0.4,
@@ -146,8 +150,8 @@ function addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, totalSl
         });
     }
 
-    // Slide number (bottom right) - wider to prevent line wrap
-    if (slideInfo.metadata?.slideNumber) {
+    // Slide number (bottom right)
+    if (!options.noPageNumber && slideInfo.metadata?.slideNumber) {
         slide.addText(slideInfo.metadata.slideNumber, {
             x: SLIDE_WIDTH - 1.2,
             y: SLIDE_HEIGHT - 0.4,
@@ -298,16 +302,27 @@ function renderSectionSlide(slide, slideInfo, pptx) {
 
     if (titleElement) {
         const titleText = extractPlainText(titleElement.text);
+        const bannerH = 1.2;
+        const bannerY = (SLIDE_HEIGHT - bannerH) / 2;
+
+        // Full-width blue background banner
+        slide.addShape(pptx.ShapeType.rect, {
+            x: 0, y: bannerY,
+            w: SLIDE_WIDTH, h: bannerH,
+            fill: { color: COLORS.primary },
+            line: { type: 'none' }
+        });
+
         slide.addText(titleText, {
-            x: 0.5,
-            y: SLIDE_HEIGHT / 2 - 0.5,
-            w: SLIDE_WIDTH - 1,
-            h: 1,
+            x: 0.6,
+            y: bannerY,
+            w: SLIDE_WIDTH - 1.2,
+            h: bannerH,
             fontSize: FONT_SIZES.sectionTitle,
             fontFace: FONT_FACE,
-            color: COLORS.primary,
+            color: COLORS.white,
             bold: true,
-            align: 'center',
+            align: 'left',
             valign: 'middle'
         });
     }
@@ -471,8 +486,9 @@ function renderContentSlide(slide, slideInfo, pptx) {
 function renderShape(slide, element, pptx) {
     const pos = element.position;
 
-    // Add a bit of extra height to fully cover text
-    const extraHeight = 0.15;
+    // Compensate for HTML padding: top is absorbed by COLUMN_CONTENT_Y_OFFSET,
+    // so shrink height by the same amount to tighten the bottom border too.
+    const extraHeight = -COLUMN_CONTENT_Y_OFFSET;
 
     slide.addShape(pptx.ShapeType.roundRect, {
         x: pos.x,
@@ -484,7 +500,7 @@ function renderShape(slide, element, pptx) {
             color: element.border.color,
             width: element.border.width
         } : { type: 'none' },
-        rectRadius: 0.03
+        rectRadius: 0.1
     });
 }
 
@@ -587,15 +603,18 @@ function renderList(slide, element, pptx) {
         }
     });
 
+    const listY = pos.inColumn
+        ? Math.max(pos.y - COLUMN_CONTENT_Y_OFFSET, 0.9)
+        : Math.max(pos.y, 0.9);
     slide.addText(allTextRuns, {
         x: Math.max(pos.x, 0.5),
-        y: Math.max(pos.y, 0.9),
+        y: listY,
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: Math.min(pos.h, SLIDE_HEIGHT - pos.y - 0.5),
         fontFace: FONT_FACE,
         valign: 'top',
         paraSpaceAfter: 8,
-        lineSpacingMultiple: 1.5
+        lineSpacingMultiple: pos.inColumn ? 1.2 : 1.5
     });
 }
 
@@ -608,14 +627,15 @@ function renderParagraph(slide, element, pptx) {
     const fontSize = pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.body;
     const textRuns = formatTextRuns(element.text, fontSize);
 
+    const paraY = pos.inColumn ? pos.y - COLUMN_CONTENT_Y_OFFSET : pos.y;
     slide.addText(textRuns, {
         x: Math.max(pos.x, 0.5),
-        y: pos.y,
+        y: paraY,
         w: Math.min(pos.w, SLIDE_WIDTH - 1),
         h: Math.max(pos.h, 0.4),
         fontFace: FONT_FACE,
         valign: 'top',
-        lineSpacingMultiple: 1.5
+        lineSpacingMultiple: pos.inColumn ? 1.2 : 1.5
     });
 }
 
@@ -645,7 +665,7 @@ function renderAdmonition(slide, element, pptx) {
         h: height,
         fill: { color: colors.bg },
         line: { type: 'none' },
-        rectRadius: 0.03
+        rectRadius: 0.1
     });
 
     // Left accent bar
@@ -671,7 +691,7 @@ function renderAdmonition(slide, element, pptx) {
                 fontSize: FONT_SIZES.body,
                 fontFace: FONT_FACE,
                 bold: true,
-                color: colors.text
+                color: COLORS.bodyText
             }
         }], {
             x: titleX,
@@ -703,7 +723,7 @@ function renderAdmonition(slide, element, pptx) {
             h: height - (contentY - pos.y) - 0.1,
             fontSize: FONT_SIZES.smallText,
             fontFace: FONT_FACE,
-            color: colors.text,
+            color: COLORS.bodyText,
             valign: 'top'
         });
     }
@@ -716,30 +736,78 @@ function renderTable(slide, element, pptx) {
     const pos = element.position;
     if (!element.rows || element.rows.length === 0) return;
 
-    const tableRows = element.rows.map((row) => {
+    const noBorder  = { type: 'none' };
+    const thickLine = { pt: 1.5, color: COLORS.primary };
+    const thinLine  = { pt: 0.75, color: COLORS.primary };
+
+    const lastRowIdx = element.rows.length - 1;
+
+    const tableRows = element.rows.map((row, rowIdx) => {
+        const isHeader  = row.some(c => c.isHeader);
+        const isLastRow = rowIdx === lastRowIdx;
+
+        // top border: thick on header row, none otherwise
+        // bottom border: thin after header, thick on last data row, none otherwise
+        const topBorder    = isHeader   ? thickLine : noBorder;
+        const bottomBorder = isHeader   ? thinLine
+                           : isLastRow  ? thickLine
+                           : noBorder;
+
         return row.map(cell => ({
             text: cell.text,
             options: {
-                bold: cell.isHeader,
-                fill: cell.isHeader ? COLORS.primary : 'F5F5F5',
-                color: cell.isHeader ? 'FFFFFF' : COLORS.bodyText,
-                fontSize: FONT_SIZES.smallText,
+                bold: isHeader,
+                fill: 'FFFFFF',
+                color: isHeader ? COLORS.primary : COLORS.bodyText,
+                fontSize: 12,
                 align: 'center',
-                valign: 'middle'
+                valign: 'middle',
+                border: [topBorder, noBorder, bottomBorder, noBorder]
             }
         }));
     });
 
     const colCount = element.rows[0]?.length || 1;
-    const tableWidth = Math.min(pos.w, SLIDE_WIDTH - 1);
+    const availableWidth = SLIDE_WIDTH - 1;
+
+    // Estimate natural column widths based on longest cell content
+    const TABLE_FONT_SIZE = 12; // pt
+    const PT_TO_INCH = 1 / 72;
+    const CELL_PADDING = 0.2; // inches, both sides combined
+
+    function estimateCellWidth(text) {
+        let w = 0;
+        for (const ch of (text || '')) {
+            // CJK characters are roughly full-width; Latin/digits are half-width
+            w += /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch)
+                ? TABLE_FONT_SIZE * PT_TO_INCH * 1.1
+                : TABLE_FONT_SIZE * PT_TO_INCH * 0.65;
+        }
+        return w + CELL_PADDING;
+    }
+
+    const naturalColWidths = Array(colCount).fill(0).map((_, ci) => {
+        let max = 0.5; // minimum column width
+        element.rows.forEach(row => {
+            const w = estimateCellWidth(row[ci]?.text || '');
+            if (w > max) max = w;
+        });
+        return max;
+    });
+
+    const totalNatural = naturalColWidths.reduce((a, b) => a + b, 0);
+    // Scale to fill available width; if content is wider, scale down to fit
+    const scale = availableWidth / totalNatural;
+    const colW = naturalColWidths.map(w => w * scale);
+    const tableWidth = availableWidth;
 
     slide.addTable(tableRows, {
         x: Math.max(pos.x, 0.5),
         y: pos.y,
         w: tableWidth,
-        colW: Array(colCount).fill(tableWidth / colCount),
+        colW,
         fontFace: FONT_FACE,
-        border: { color: COLORS.lightText, pt: 0.5 }
+        border: noBorder
     });
 }
 
@@ -821,8 +889,16 @@ function extractPlainText(runs) {
 function formatTextRuns(runs, defaultSize) {
     if (!runs || !Array.isArray(runs)) return [{ text: '', options: {} }];
 
-    return runs.map(run => ({
-        text: run.text || '',
+    // Strip leading newlines/whitespace from the very first non-empty run
+    let firstNonEmpty = true;
+    return runs.map(run => {
+        let text = run.text || '';
+        if (firstNonEmpty && text.trim()) {
+            text = text.replace(/^[\n\r\s]+/, '');
+            firstNonEmpty = false;
+        }
+        return {
+        text,
         options: {
             bold: run.options?.bold,
             italic: run.options?.italic,
@@ -830,5 +906,6 @@ function formatTextRuns(runs, defaultSize) {
             color: run.options?.bold ? COLORS.primary : COLORS.bodyText, // Bold text in blue
             fontSize: defaultSize
         }
-    }));
+        };
+    });
 }

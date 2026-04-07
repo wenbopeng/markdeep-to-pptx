@@ -4,6 +4,9 @@
     "description": "Convert Markdeep Slides to PowerPoint presentations",
     "main": "src/index.js",
     "type": "module",
+    "bin": {
+        "md2pptx": "src/index.js"
+    },
     "scripts": {
         "convert": "node src/index.js",
         "test": "node src/index.js markdeep-slides-project/Tutorial.html output/Tutorial.pptx"

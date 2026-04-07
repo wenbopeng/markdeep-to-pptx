@@ -2,15 +2,16 @@
 
 /**
  * Markdeep Slides to PPTX Converter
- * 
+ *
  * Main entry point for the converter.
- * 
+ *
  * Usage:
- *   node src/index.js <input.html> [output.pptx]
- *   
+ *   node src/index.js <input.html> [output.pptx] [--no-navbar]
+ *
  * Examples:
  *   node src/index.js presentation.html
  *   node src/index.js presentation.html output/my-presentation.pptx
+ *   node src/index.js presentation.html --no-navbar
  */
 
 import { extractSlides } from './slide-extractor.js';
@@ -23,7 +24,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-    const args = process.argv.slice(2);
+    const rawArgs = process.argv.slice(2);
+
+    // Separate flags from positional arguments
+    const flags = rawArgs.filter(a => a.startsWith('--'));
+    const args = rawArgs.filter(a => !a.startsWith('--'));
+
+    const noNavbar = flags.includes('--no-navbar');
+    const noProgressBar = flags.includes('--no-progressbar');
+    const noChapter = flags.includes('--no-chapter');
+    const noPageNumber = flags.includes('--no-page');
 
     if (args.length === 0) {
         console.log(`
@@ -31,15 +41,22 @@ Markdeep Slides to PPTX Converter
 =================================
 
 Usage:
-  node src/index.js <input.html> [output.pptx]
+  node src/index.js <input.html> [output.pptx] [--no-navbar]
 
 Arguments:
   input.html   - Path to the Markdeep Slides HTML file
   output.pptx  - Optional output path for the PPTX file (default: same name as input)
 
+Options:
+  --no-navbar       - Do not render the navigation bar on slides
+  --no-progressbar  - Do not render the progress bar at the bottom
+  --no-chapter      - Do not render the chapter label in the bottom left
+  --no-page         - Do not render the page number in the bottom right
+
 Examples:
   node src/index.js presentation.html
   node src/index.js ../markdeep-slides-project/Tutorial.html output/Tutorial.pptx
+  node src/index.js presentation.html --no-navbar
 `);
         process.exit(0);
     }
@@ -56,14 +73,8 @@ Examples:
     let outputPath = args[1];
     if (!outputPath) {
         const inputBasename = path.basename(inputPath, path.extname(inputPath));
-        const outputDir = path.join(path.dirname(__filename), '..', 'output');
-
-        // Ensure output directory exists
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
-
-        outputPath = path.join(outputDir, `${inputBasename}.pptx`);
+        const inputDir = path.dirname(path.resolve(inputPath));
+        outputPath = path.join(inputDir, `${inputBasename}.pptx`);
     }
 
     console.log(`
@@ -74,6 +85,7 @@ Examples:
 
     console.log(`📄 Input:  ${inputPath}`);
     console.log(`📦 Output: ${outputPath}`);
+    if (noNavbar) console.log(`🚫 Navbar: disabled`);
     console.log('');
 
     try {
@@ -87,7 +99,7 @@ Examples:
 
         // Step 2: Generate PPTX
         console.log('📊 Step 2: Generating PowerPoint presentation...');
-        await generatePptx(slideData, outputPath);
+        await generatePptx(slideData, outputPath, { noNavbar, noProgressBar, noChapter, noPageNumber });
         console.log(`   ✓ Presentation saved successfully`);
         console.log('');
 
