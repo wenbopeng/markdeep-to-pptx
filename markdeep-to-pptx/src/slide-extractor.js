@@ -81,6 +81,7 @@ export async function extractSlides(htmlPath) {
 
         const slides = document.querySelectorAll('.slide');
         const extractedSlides = [];
+        let mathIdCounter = 0;
 
         slides.forEach((slide, slideIndex) => {
             const slideContent = slide.querySelector('.slide-content');
@@ -293,6 +294,14 @@ export async function extractSlides(htmlPath) {
 
                 // Handle paragraphs
                 if (tagName === 'P') {
+                    // If paragraph contains inline math, screenshot the whole paragraph
+                    if (el.querySelector('.MathJax_SVG')) {
+                        const mathId = `math-${mathIdCounter++}`;
+                        el.setAttribute('data-math-id', mathId);
+                        elements.push({ type: 'math_pending', mathId, position });
+                        return;
+                    }
+
                     // If paragraph contains an image, extract the image instead
                     const imgEl = el.querySelector('img');
                     if (imgEl) {
@@ -329,6 +338,14 @@ export async function extractSlides(htmlPath) {
 
                 // Handle lists (UL, OL)
                 if (tagName === 'UL' || tagName === 'OL') {
+                    // If list contains inline math, screenshot the whole list
+                    if (el.querySelector('.MathJax_SVG')) {
+                        const mathId = `math-${mathIdCounter++}`;
+                        el.setAttribute('data-math-id', mathId);
+                        elements.push({ type: 'math_pending', mathId, position });
+                        return;
+                    }
+
                     const items = [];
 
                     // Recursive function to extract list items with nesting level
@@ -570,6 +587,14 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle block-level MathJax (MathJax_SVG_Display)
+                if (tagName === 'DIV' && el.classList.contains('MathJax_SVG_Display')) {
+                    const mathId = `math-${mathIdCounter++}`;
+                    el.setAttribute('data-math-id', mathId);
+                    elements.push({ type: 'math_pending', mathId, position });
+                    return;
+                }
+
                 // Handle Markdeep image container (div.image) — extract image + caption together
                 if (tagName === 'DIV' && el.classList.contains('image')) {
                     const imgEl = el.querySelector('img');
@@ -728,6 +753,30 @@ export async function extractSlides(htmlPath) {
             slides: extractedSlides
         };
     });
+
+    // Screenshot all math_pending elements and replace with image elements
+    for (const slide of slideData.slides) {
+        for (let i = 0; i < slide.elements.length; i++) {
+            const el = slide.elements[i];
+            if (el.type !== 'math_pending') continue;
+
+            try {
+                const locator = page.locator(`[data-math-id="${el.mathId}"]`);
+                const pngBuf = await locator.screenshot({ type: 'png' });
+                const dataUri = 'data:image/png;base64,' + pngBuf.toString('base64');
+                slide.elements[i] = {
+                    type: 'image',
+                    src: dataUri,
+                    alt: 'math',
+                    position: el.position
+                };
+            } catch (err) {
+                console.warn(`   ⚠ 数学公式截图失败 (${el.mathId}): ${err.message}`);
+                slide.elements.splice(i, 1);
+                i--;
+            }
+        }
+    }
 
     await browser.close();
 
