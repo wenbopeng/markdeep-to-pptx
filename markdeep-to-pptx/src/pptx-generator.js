@@ -8,6 +8,11 @@
  */
 
 import pptxgen from 'pptxgenjs';
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Conversion factor: HTML pixels to PPTX inches (based on 1920px = 10 inches)
 const PX_TO_INCH = 10 / 1920;
@@ -101,7 +106,7 @@ export async function generatePptx(slideData, outputPath, options = {}) {
         } else if (isTocSlide) {
             renderTocSlide(slide, slideInfo, pptx);
         } else {
-            renderContentSlide(slide, slideInfo, pptx);
+            await renderContentSlide(slide, slideInfo, pptx);
         }
 
         // Add footer elements (chapter label, slide number, and progress bar)
@@ -408,7 +413,7 @@ function renderTocSlide(slide, slideInfo, pptx) {
  * Render content slide (H2 title + content)
  * Uses actual positions from HTML extraction
  */
-function renderContentSlide(slide, slideInfo, pptx) {
+async function renderContentSlide(slide, slideInfo, pptx) {
     // Find slide title (H2)
     const titleElement = slideInfo.elements.find(e => e.type === 'heading' && e.level === 2);
 
@@ -476,7 +481,71 @@ function renderContentSlide(slide, slideInfo, pptx) {
             case 'shape':
                 renderShape(slide, element, pptx);
                 break;
+            case 'image':
+                await renderImage(slide, element);
+                break;
         }
+    }
+}
+
+/**
+ * Fetch a URL and return a Buffer
+ */
+function fetchBuffer(url) {
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, res => {
+            const chunks = [];
+            res.on('data', chunk => chunks.push(chunk));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+            res.on('error', reject);
+        }).on('error', reject);
+    });
+}
+
+/**
+ * Render image element
+ */
+async function renderImage(slide, element) {
+    const pos = element.position;
+    const src = element.src || '';
+
+    if (!src) return;
+
+    try {
+        let imageData;
+        let extName;
+
+        if (src.startsWith('data:image/')) {
+            // Base64 data URI — pass directly
+            const mimeMatch = src.match(/data:image\/([a-zA-Z+]+);base64,/);
+            extName = mimeMatch ? mimeMatch[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg') : 'png';
+            imageData = src; // PptxGenJS accepts data URIs natively
+        } else if (src.startsWith('http://') || src.startsWith('https://')) {
+            // Remote URL — download to buffer
+            const buf = await fetchBuffer(src);
+            const urlPath = new URL(src).pathname;
+            extName = path.extname(urlPath).replace('.', '') || 'png';
+            imageData = `data:image/${extName};base64,` + buf.toString('base64');
+        } else {
+            // Local file path (file:// or relative)
+            const filePath = src.startsWith('file://') ? fileURLToPath(src) : src;
+            extName = path.extname(filePath).replace('.', '') || 'png';
+            imageData = filePath;
+        }
+
+        // Normalise extension
+        if (extName === 'jpg') extName = 'jpeg';
+
+        slide.addImage({
+            data: imageData,
+            x: Math.max(pos.x, 0),
+            y: pos.y,
+            w: Math.min(pos.w, SLIDE_WIDTH),
+            h: pos.h
+        });
+    } catch (err) {
+        console.warn(`   ⚠ 图片加载失败，已跳过: ${src.slice(0, 80)} (${err.message})`);
     }
 }
 

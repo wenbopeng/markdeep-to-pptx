@@ -293,6 +293,25 @@ export async function extractSlides(htmlPath) {
 
                 // Handle paragraphs
                 if (tagName === 'P') {
+                    // If paragraph contains an image, extract the image instead
+                    const imgEl = el.querySelector('img');
+                    if (imgEl) {
+                        const imgRect = imgEl.getBoundingClientRect();
+                        elements.push({
+                            type: 'image',
+                            src: imgEl.src,
+                            alt: imgEl.alt || '',
+                            position: {
+                                x: (imgRect.left - parentRect.left) * scaleX,
+                                y: (imgRect.top - parentRect.top) * scaleY,
+                                w: imgRect.width * scaleX,
+                                h: imgRect.height * scaleY,
+                                inColumn
+                            }
+                        });
+                        return;
+                    }
+
                     const text = el.textContent.trim();
                     if (!text) return;
 
@@ -579,6 +598,14 @@ export async function extractSlides(htmlPath) {
                     });
                     return;
                 }
+
+                // Fallback: recurse into any unrecognised container (CENTER, SECTION, FIGURE, A, etc.)
+                // This ensures nested elements like images inside <center><a><img> are not lost.
+                el.childNodes.forEach(child => {
+                    if (child.nodeType === Node.ELEMENT_NODE) {
+                        processElement(child, depth + 1, inColumn);
+                    }
+                });
             }
 
             // Process all direct children of slide content
