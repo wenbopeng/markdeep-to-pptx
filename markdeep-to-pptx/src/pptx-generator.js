@@ -57,7 +57,7 @@ const COLORS = {
     questionBorder: '9b59b6',
     questionText: '6c3483',
     // Bullet point color
-    bulletColor: '034295'
+    bulletColor: '000000'
 };
 
 // Standard slide dimensions
@@ -417,6 +417,11 @@ async function renderContentSlide(slide, slideInfo, pptx) {
     // Find slide title (H2)
     const titleElement = slideInfo.elements.find(e => e.type === 'heading' && e.level === 2);
 
+    // Compute text scale for [small-text] / [tiny-text] slides
+    const textScale = slideInfo.metadata?.isTinyText ? 0.7
+                    : slideInfo.metadata?.isSmallText ? 0.85
+                    : 1.0;
+
     // Check if this slide has navbar (to adjust title position)
     const hasNavBar = slideInfo.metadata?.navChapters?.length > 0;
     const titleY = hasNavBar ? NAV_BAR_HEIGHT + 0.1 : 0.3;
@@ -433,7 +438,7 @@ async function renderContentSlide(slide, slideInfo, pptx) {
             y: titleY,
             w: titleWidth,
             h: 0.5,
-            fontSize: FONT_SIZES.slideTitle,
+            fontSize: Math.round(FONT_SIZES.slideTitle * textScale),
             fontFace: FONT_FACE,
             color: COLORS.titleText,
             bold: true
@@ -458,25 +463,25 @@ async function renderContentSlide(slide, slideInfo, pptx) {
         switch (element.type) {
             case 'heading':
                 // Render H3+ as section subheadings
-                renderSubheading(slide, element, pptx);
+                renderSubheading(slide, element, pptx, textScale);
                 break;
             case 'list':
-                renderList(slide, element, pptx);
+                renderList(slide, element, pptx, textScale);
                 break;
             case 'paragraph':
-                renderParagraph(slide, element, pptx);
+                renderParagraph(slide, element, pptx, textScale);
                 break;
             case 'admonition':
-                renderAdmonition(slide, element, pptx);
+                renderAdmonition(slide, element, pptx, textScale);
                 break;
             case 'table':
                 renderTable(slide, element, pptx);
                 break;
             case 'code':
-                renderCode(slide, element, pptx);
+                renderCode(slide, element, pptx, textScale);
                 break;
             case 'blockquote':
-                renderBlockquote(slide, element, pptx);
+                renderBlockquote(slide, element, pptx, textScale);
                 break;
             case 'shape':
                 renderShape(slide, element, pptx);
@@ -593,7 +598,7 @@ function renderShape(slide, element, pptx) {
 /**
  * Render H3+ subheadings
  */
-function renderSubheading(slide, element, pptx) {
+function renderSubheading(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
     const text = extractPlainText(element.text);
 
@@ -604,7 +609,7 @@ function renderSubheading(slide, element, pptx) {
         5: FONT_SIZES.smallText, // H5: smaller
         6: FONT_SIZES.smallText  // H6: smaller
     };
-    const fontSize = fontSizeMap[element.level] || FONT_SIZES.body;
+    const fontSize = Math.round((fontSizeMap[element.level] || FONT_SIZES.body) * textScale);
 
     // Use text runs for proper bold styling
     slide.addText([{
@@ -627,12 +632,12 @@ function renderSubheading(slide, element, pptx) {
 /**
  * Render list using extracted position
  */
-function renderList(slide, element, pptx) {
+function renderList(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
     if (!element.items || element.items.length === 0) return;
 
     // Use smaller font for column content
-    const fontSize = pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.listItem;
+    const fontSize = Math.round((pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.listItem) * textScale);
 
     // Build list items with explicit bullet characters and indentation
     const allTextRuns = [];
@@ -707,10 +712,10 @@ function renderList(slide, element, pptx) {
 /**
  * Render paragraph
  */
-function renderParagraph(slide, element, pptx) {
+function renderParagraph(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
     // Use smaller font for column content
-    const fontSize = pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.body;
+    const fontSize = Math.round((pos.inColumn ? FONT_SIZES.smallText : FONT_SIZES.body) * textScale);
     const textRuns = formatTextRuns(element.text, fontSize);
 
     const paraY = pos.inColumn ? pos.y - COLUMN_CONTENT_Y_OFFSET : pos.y;
@@ -728,7 +733,7 @@ function renderParagraph(slide, element, pptx) {
 /**
  * Render admonition (callout box)
  */
-function renderAdmonition(slide, element, pptx) {
+function renderAdmonition(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
 
     // Get colors based on type
@@ -774,7 +779,7 @@ function renderAdmonition(slide, element, pptx) {
         slide.addText([{
             text: element.title,
             options: {
-                fontSize: FONT_SIZES.body,
+                fontSize: Math.round(FONT_SIZES.body * textScale),
                 fontFace: FONT_FACE,
                 bold: true,
                 color: COLORS.bodyText
@@ -807,7 +812,7 @@ function renderAdmonition(slide, element, pptx) {
             y: contentY,
             w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.4,
             h: height - (contentY - pos.y) - 0.1,
-            fontSize: FONT_SIZES.smallText,
+            fontSize: Math.round(FONT_SIZES.smallText * textScale),
             fontFace: FONT_FACE,
             color: COLORS.bodyText,
             valign: 'top'
@@ -900,7 +905,7 @@ function renderTable(slide, element, pptx) {
 /**
  * Render code block
  */
-function renderCode(slide, element, pptx) {
+function renderCode(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
     const height = Math.max(pos.h, 0.5);
 
@@ -920,7 +925,7 @@ function renderCode(slide, element, pptx) {
         y: pos.y + 0.08,
         w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.2,
         h: height - 0.16,
-        fontSize: FONT_SIZES.code,
+        fontSize: Math.round(FONT_SIZES.code * textScale),
         fontFace: 'Courier New',
         color: '333333',
         valign: 'top'
@@ -930,7 +935,7 @@ function renderCode(slide, element, pptx) {
 /**
  * Render blockquote
  */
-function renderBlockquote(slide, element, pptx) {
+function renderBlockquote(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
     const height = Math.max(pos.h, 0.4);
 
@@ -951,7 +956,7 @@ function renderBlockquote(slide, element, pptx) {
         y: pos.y,
         w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.15,
         h: height,
-        fontSize: FONT_SIZES.body,
+        fontSize: Math.round(FONT_SIZES.body * textScale),
         fontFace: 'Georgia',
         italic: true,
         color: COLORS.lightText,
