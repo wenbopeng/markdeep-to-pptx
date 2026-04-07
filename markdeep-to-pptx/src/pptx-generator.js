@@ -69,6 +69,7 @@ const NAV_BAR_HEIGHT = 0.35;
 
 // Top padding offset inside column backgrounds (HTML padding-top → PPTX gap compensation)
 const COLUMN_CONTENT_Y_OFFSET = 0.1;
+const TOP_COLUMN_MIN_Y = 1.06;
 
 /**
  * Create a PowerPoint presentation from extracted slide data
@@ -425,6 +426,7 @@ async function renderContentSlide(slide, slideInfo, pptx) {
     // Check if this slide has navbar (to adjust title position)
     const hasNavBar = slideInfo.metadata?.navChapters?.length > 0;
     const titleY = hasNavBar ? NAV_BAR_HEIGHT + 0.1 : 0.3;
+    const topColumnShiftMap = computeTopColumnShiftMap(slideInfo);
 
     // Add slide title using extracted position
     if (titleElement) {
@@ -457,37 +459,39 @@ async function renderContentSlide(slide, slideInfo, pptx) {
     }
 
     // Process other content elements
-    for (const element of slideInfo.elements) {
+    for (const [index, element] of slideInfo.elements.entries()) {
         if (element.type === 'heading' && element.level <= 2) continue; // Skip H1/H2
 
-        switch (element.type) {
+        const adjustedElement = adjustElementY(element, topColumnShiftMap.get(index) || 0);
+
+        switch (adjustedElement.type) {
             case 'heading':
                 // Render H3+ as section subheadings
-                renderSubheading(slide, element, pptx, textScale);
+                renderSubheading(slide, adjustedElement, pptx, textScale);
                 break;
             case 'list':
-                renderList(slide, element, pptx, textScale);
+                renderList(slide, adjustedElement, pptx, textScale);
                 break;
             case 'paragraph':
-                renderParagraph(slide, element, pptx, textScale);
+                renderParagraph(slide, adjustedElement, pptx, textScale);
                 break;
             case 'admonition':
-                renderAdmonition(slide, element, pptx, textScale);
+                renderAdmonition(slide, adjustedElement, pptx, textScale);
                 break;
             case 'table':
-                renderTable(slide, element, pptx);
+                renderTable(slide, adjustedElement, pptx);
                 break;
             case 'code':
-                renderCode(slide, element, pptx, textScale);
+                renderCode(slide, adjustedElement, pptx, textScale);
                 break;
             case 'blockquote':
-                renderBlockquote(slide, element, pptx, textScale);
+                renderBlockquote(slide, adjustedElement, pptx, textScale);
                 break;
             case 'shape':
-                renderShape(slide, element, pptx);
+                renderShape(slide, adjustedElement, pptx);
                 break;
             case 'image':
-                await renderImage(slide, element);
+                await renderImage(slide, adjustedElement);
                 break;
         }
     }
@@ -1001,4 +1005,52 @@ function formatTextRuns(runs, defaultSize) {
         }
         };
     });
+}
+
+function computeTopColumnShiftMap(slideInfo) {
+    const shiftMap = new Map();
+    if (!slideInfo.metadata?.isSmallText && !slideInfo.metadata?.isTinyText) return shiftMap;
+
+    const contentStartIndex = slideInfo.elements.findIndex(
+        (element) => !(element.type === 'heading' && element.level <= 2)
+    );
+    if (contentStartIndex < 0) return shiftMap;
+
+    const firstContentElement = slideInfo.elements[contentStartIndex];
+    if (!isTopColumnElement(firstContentElement)) return shiftMap;
+
+    const topColumnIndices = [];
+    for (let i = contentStartIndex; i < slideInfo.elements.length; i++) {
+        const element = slideInfo.elements[i];
+        if (!isTopColumnElement(element)) break;
+        topColumnIndices.push(i);
+    }
+
+    if (topColumnIndices.length === 0) return shiftMap;
+
+    const topY = Math.min(
+        ...topColumnIndices.map(index => slideInfo.elements[index].position?.y ?? Number.POSITIVE_INFINITY)
+    );
+    if (!Number.isFinite(topY)) return shiftMap;
+
+    const shiftY = Math.max(0, TOP_COLUMN_MIN_Y - topY);
+    if (shiftY <= 0) return shiftMap;
+
+    topColumnIndices.forEach(index => shiftMap.set(index, shiftY));
+    return shiftMap;
+}
+
+function isTopColumnElement(element) {
+    return !!(element?.position?.inColumn || element?.isColumnBackground);
+}
+
+function adjustElementY(element, shiftY) {
+    if (!shiftY) return element;
+    return {
+        ...element,
+        position: {
+            ...element.position,
+            y: element.position.y + shiftY
+        }
+    };
 }

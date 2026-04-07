@@ -549,6 +549,7 @@ export async function extractSlides(htmlPath) {
                         if (hasBg || hasBorder) {
                             elements.push({
                                 type: 'shape',
+                                isColumnBackground: true,
                                 position: {
                                     x: (colRect.left - parentRect.left) * scaleX,
                                     y: (colRect.top - parentRect.top) * scaleY,
