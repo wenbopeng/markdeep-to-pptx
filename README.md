@@ -28,6 +28,7 @@ md2pptx <input.html> [output.pptx] [选项]
 
 | 选项 | 说明 |
 |------|------|
+| `--clean` | 等价于同时开启 `--no-navbar --no-progressbar --no-chapter --no-page` |
 | `--no-navbar` | 不渲染顶部章节导航栏 |
 | `--no-progressbar` | 不渲染底部进度条 |
 | `--no-chapter` | 不渲染左下角本章标签 |
@@ -44,6 +45,9 @@ md2pptx presentation.html ./output/my-slides.pptx
 
 # 去掉导航栏和进度条
 md2pptx presentation.html --no-navbar --no-progressbar
+
+# 使用精简模式
+md2pptx presentation.html --clean
 
 # 去掉所有页脚元素
 md2pptx presentation.html --no-progressbar --no-chapter --no-page

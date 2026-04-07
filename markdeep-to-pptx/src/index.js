@@ -6,11 +6,12 @@
  * Main entry point for the converter.
  *
  * Usage:
- *   node src/index.js <input.html> [output.pptx] [--no-navbar]
+ *   node src/index.js <input.html> [output.pptx] [--clean] [--no-navbar]
  *
  * Examples:
  *   node src/index.js presentation.html
  *   node src/index.js presentation.html output/my-presentation.pptx
+ *   node src/index.js presentation.html --clean
  *   node src/index.js presentation.html --no-navbar
  */
 
@@ -30,10 +31,11 @@ async function main() {
     const flags = rawArgs.filter(a => a.startsWith('--'));
     const args = rawArgs.filter(a => !a.startsWith('--'));
 
-    const noNavbar = flags.includes('--no-navbar');
-    const noProgressBar = flags.includes('--no-progressbar');
-    const noChapter = flags.includes('--no-chapter');
-    const noPageNumber = flags.includes('--no-page');
+    const clean = flags.includes('--clean');
+    const noNavbar = clean || flags.includes('--no-navbar');
+    const noProgressBar = clean || flags.includes('--no-progressbar');
+    const noChapter = clean || flags.includes('--no-chapter');
+    const noPageNumber = clean || flags.includes('--no-page');
 
     if (args.length === 0) {
         console.log(`
@@ -41,13 +43,14 @@ Markdeep Slides to PPTX Converter
 =================================
 
 Usage:
-  node src/index.js <input.html> [output.pptx] [--no-navbar]
+  node src/index.js <input.html> [output.pptx] [--clean] [--no-navbar]
 
 Arguments:
   input.html   - Path to the Markdeep Slides HTML file
   output.pptx  - Optional output path for the PPTX file (default: same name as input)
 
 Options:
+  --clean           - Equivalent to --no-navbar --no-progressbar --no-chapter --no-page
   --no-navbar       - Do not render the navigation bar on slides
   --no-progressbar  - Do not render the progress bar at the bottom
   --no-chapter      - Do not render the chapter label in the bottom left
@@ -56,6 +59,7 @@ Options:
 Examples:
   node src/index.js presentation.html
   node src/index.js ../markdeep-slides-project/Tutorial.html output/Tutorial.pptx
+  node src/index.js presentation.html --clean
   node src/index.js presentation.html --no-navbar
 `);
         process.exit(0);
@@ -85,6 +89,7 @@ Examples:
 
     console.log(`📄 Input:  ${inputPath}`);
     console.log(`📦 Output: ${outputPath}`);
+    if (clean) console.log(`🧹 Clean: enabled`);
     if (noNavbar) console.log(`🚫 Navbar: disabled`);
     console.log('');
 
