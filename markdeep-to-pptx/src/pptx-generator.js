@@ -892,8 +892,10 @@ function renderTable(slide, element, pptx) {
     const colW = naturalColWidths.map(w => w * scale);
     const tableWidth = availableWidth;
 
+    const tableX = (SLIDE_WIDTH - tableWidth) / 2;
+
     slide.addTable(tableRows, {
-        x: Math.max(pos.x, 0.5),
+        x: tableX,
         y: pos.y,
         w: tableWidth,
         colW,
