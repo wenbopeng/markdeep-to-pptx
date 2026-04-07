@@ -570,6 +570,30 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle Markdeep image container (div.image) — extract image + caption together
+                if (tagName === 'DIV' && el.classList.contains('image')) {
+                    const imgEl = el.querySelector('img');
+                    if (imgEl) {
+                        const captionEl = el.querySelector('span.imagecaption');
+                        const caption = captionEl ? captionEl.textContent.trim() : null;
+                        const imgRect = imgEl.getBoundingClientRect();
+                        elements.push({
+                            type: 'image',
+                            src: imgEl.src,
+                            alt: imgEl.alt || '',
+                            caption,
+                            position: {
+                                x: (imgRect.left - parentRect.left) * scaleX,
+                                y: (imgRect.top - parentRect.top) * scaleY,
+                                w: imgRect.width * scaleX,
+                                h: imgRect.height * scaleY,
+                                inColumn
+                            }
+                        });
+                    }
+                    return;
+                }
+
                 // Handle generic divs - process children
                 if (tagName === 'DIV') {
                     // Check if this div has a background (shape)

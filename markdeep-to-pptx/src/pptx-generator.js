@@ -537,13 +537,30 @@ async function renderImage(slide, element) {
         // Normalise extension
         if (extName === 'jpg') extName = 'jpeg';
 
+        const imgX = Math.max(pos.x, 0);
+        const imgW = Math.min(pos.w, SLIDE_WIDTH);
+
         slide.addImage({
             data: imageData,
-            x: Math.max(pos.x, 0),
+            x: imgX,
             y: pos.y,
-            w: Math.min(pos.w, SLIDE_WIDTH),
+            w: imgW,
             h: pos.h
         });
+
+        if (element.caption) {
+            slide.addText(element.caption, {
+                x: imgX,
+                y: pos.y + pos.h + 0.05,
+                w: imgW,
+                h: 0.25,
+                fontSize: FONT_SIZES.footer,
+                fontFace: FONT_FACE,
+                color: COLORS.lightText,
+                align: 'center',
+                italic: true
+            });
+        }
     } catch (err) {
         console.warn(`   ⚠ 图片加载失败，已跳过: ${src.slice(0, 80)} (${err.message})`);
     }
