@@ -47,8 +47,8 @@ export async function extractSlides(htmlPath) {
     // Wait for Markdeep to render the slides
     await page.waitForSelector('.slide', { timeout: 30000 });
 
-    // Give extra time for MathJax and other rendering to complete
-    await page.waitForTimeout(2000);
+    // Give extra time for MathJax, Mermaid and other async rendering to complete
+    await page.waitForTimeout(4000);
 
     // Extract slide data
     const slideData = await page.evaluate(() => {
@@ -82,6 +82,7 @@ export async function extractSlides(htmlPath) {
         const slides = document.querySelectorAll('.slide');
         const extractedSlides = [];
         let mathIdCounter = 0;
+        let chartIdCounter = 0;
 
         slides.forEach((slide, slideIndex) => {
             const slideContent = slide.querySelector('.slide-content');
@@ -620,6 +621,17 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle Mermaid / ECharts / chart.js / D3 diagrams — screenshot as image
+                if (el.classList.contains('markdeep-mermaid') ||
+                    el.classList.contains('markdeep-echarts') ||
+                    el.classList.contains('markdeep-chartjs') ||
+                    el.classList.contains('markdeep-d3-force')) {
+                    const chartId = `chart-${chartIdCounter++}`;
+                    el.setAttribute('data-chart-id', chartId);
+                    elements.push({ type: 'chart_pending', chartId, position });
+                    return;
+                }
+
                 // Handle generic divs - process children
                 if (tagName === 'DIV') {
                     // Check if this div has a background (shape)
@@ -773,6 +785,31 @@ export async function extractSlides(htmlPath) {
                 };
             } catch (err) {
                 console.warn(`   ⚠ 数学公式截图失败 (${el.mathId}): ${err.message}`);
+                slide.elements.splice(i, 1);
+                i--;
+            }
+        }
+    }
+
+    // Screenshot all chart_pending elements and replace with image elements
+    for (const slide of slideData.slides) {
+        for (let i = 0; i < slide.elements.length; i++) {
+            const el = slide.elements[i];
+            if (el.type !== 'chart_pending') continue;
+
+            try {
+                const locator = page.locator(`[data-chart-id="${el.chartId}"]`);
+                const pngBuf = await locator.screenshot({ type: 'png' });
+                const dataUri = 'data:image/png;base64,' + pngBuf.toString('base64');
+                slide.elements[i] = {
+                    type: 'image',
+                    src: dataUri,
+                    alt: 'chart',
+                    position: el.position
+                };
+                console.log(`   ✓ 图表截图成功 (${el.chartId})`);
+            } catch (err) {
+                console.warn(`   ⚠ 图表截图失败 (${el.chartId}): ${err.message}`);
                 slide.elements.splice(i, 1);
                 i--;
             }
