@@ -621,6 +621,82 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle inline SVG blocks — extract as vector SVG data URI (no screenshot needed)
+                if (el.classList.contains('markdeep-svg')) {
+                    const svgEl = el.querySelector('svg');
+                    if (svgEl) {
+                        try {
+                            // ── Step 1: Resolve natural SVG dimensions from viewBox ──────────
+                            // renderSVG() strips width/height attrs and sets style 100%×100%,
+                            // so viewBox is the only reliable source of the intrinsic ratio.
+                            let naturalW = 0, naturalH = 0;
+                            const vbAttr = svgEl.getAttribute('viewBox');
+                            if (vbAttr) {
+                                const parts = vbAttr.trim().split(/[\s,]+/).map(parseFloat);
+                                if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+                                    naturalW = parts[2];  // viewBox width
+                                    naturalH = parts[3];  // viewBox height
+                                }
+                            }
+
+                            // ── Step 2: Compute PPTX size that fits inside the allocated
+                            //           region while preserving the viewBox aspect ratio ──────
+                            let svgW = position.w;
+                            let svgH = position.h;
+                            if (naturalW > 0 && naturalH > 0) {
+                                const naturalRatio  = naturalW / naturalH;   // e.g. 1.0 for a square
+                                const allocRatio    = position.w / position.h;
+                                if (allocRatio > naturalRatio) {
+                                    // allocated slot is wider → constrain by height
+                                    svgW = position.h * naturalRatio;
+                                    svgH = position.h;
+                                } else {
+                                    // allocated slot is taller → constrain by width
+                                    svgW = position.w;
+                                    svgH = position.w / naturalRatio;
+                                }
+                            }
+
+                            // ── Step 3: Fix the SVG element before serialisation ─────────────
+                            // Replace percentage-based style dims with the absolute viewBox
+                            // values so PowerPoint/PptxGenJS know the intrinsic size and can
+                            // scale without distortion.
+                            svgEl.setAttribute('width',  naturalW  || svgW);
+                            svgEl.setAttribute('height', naturalH  || svgH);
+                            svgEl.style.width  = '';
+                            svgEl.style.height = '';
+                            // Make sure PowerPoint respects the aspect ratio when it scales the image
+                            if (!svgEl.getAttribute('preserveAspectRatio')) {
+                                svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                            }
+
+                            // ── Step 4: Serialise and push ────────────────────────────────────
+                            const serializer = new XMLSerializer();
+                            const svgStr = serializer.serializeToString(svgEl);
+                            // btoa only handles latin1; encodeURIComponent+unescape handles UTF-8
+                            const svgB64 = btoa(unescape(encodeURIComponent(svgStr)));
+                            elements.push({
+                                type: 'image',
+                                src: 'data:image/svg+xml;base64,' + svgB64,
+                                alt: 'svg',
+                                position: {
+                                    x: position.x,
+                                    y: position.y,
+                                    w: svgW,
+                                    h: svgH,
+                                    inColumn: position.inColumn
+                                }
+                            });
+                        } catch (e) {
+                            // Fallback: schedule a screenshot
+                            const chartId = `chart-${chartIdCounter++}`;
+                            el.setAttribute('data-chart-id', chartId);
+                            elements.push({ type: 'chart_pending', chartId, position });
+                        }
+                    }
+                    return;
+                }
+
                 // Handle Mermaid / ECharts / chart.js / D3 diagrams — screenshot as image
                 if (el.classList.contains('markdeep-mermaid') ||
                     el.classList.contains('markdeep-echarts') ||
