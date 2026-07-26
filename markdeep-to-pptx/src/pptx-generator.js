@@ -57,7 +57,10 @@ const COLORS = {
     questionBorder: '9b59b6',
     questionText: '6c3483',
     // Bullet point color
-    bulletColor: '000000'
+    bulletColor: '000000',
+    // :::quote::: card
+    quoteCardBackground: 'F5F5F5',
+    quoteCardBorder: 'C0C0C0'
 };
 
 // Standard slide dimensions
@@ -486,6 +489,12 @@ async function renderContentSlide(slide, slideInfo, pptx) {
                 break;
             case 'blockquote':
                 renderBlockquote(slide, adjustedElement, pptx, textScale);
+                break;
+            case 'quoteCard':
+                renderQuoteCard(slide, adjustedElement, pptx, textScale);
+                break;
+            case 'statCard':
+                renderStatCard(slide, adjustedElement, pptx, textScale);
                 break;
             case 'shape':
                 renderShape(slide, adjustedElement, pptx);
@@ -968,6 +977,106 @@ function renderBlockquote(slide, element, pptx, textScale = 1.0) {
         color: COLORS.lightText,
         valign: 'top'
     });
+}
+
+/**
+ * Render a :::quote 作者::: card — light card background, left accent bar,
+ * italic body, and a right-aligned author line (colored with the source
+ * element's own computed color, so it follows the active markdeep-slides theme).
+ */
+function renderQuoteCard(slide, element, pptx, textScale = 1.0) {
+    const pos = element.position;
+    const x = Math.max(pos.x, 0.5);
+    const w = Math.min(pos.w, SLIDE_WIDTH - 1);
+    const height = Math.max(pos.h, 0.6);
+
+    slide.addShape(pptx.ShapeType.roundRect, {
+        x, y: pos.y, w, h: height,
+        fill: { color: COLORS.quoteCardBackground },
+        line: { type: 'none' },
+        rectRadius: 0.08
+    });
+
+    slide.addShape(pptx.ShapeType.rect, {
+        x, y: pos.y, w: 0.06, h: height,
+        fill: { color: COLORS.quoteCardBorder },
+        line: { type: 'none' }
+    });
+
+    const bodyX = x + 0.25;
+    const bodyW = w - 0.5;
+    const bodyY = pos.y + (element.bodyOffsetY || 0.12);
+    const authorHeight = element.author ? Math.max(element.authorHeight || 0, 0.3) : 0;
+    const bodyH = Math.max(height - (bodyY - pos.y) - authorHeight - 0.1, 0.3);
+
+    slide.addText(extractPlainText(element.text), {
+        x: bodyX, y: bodyY, w: bodyW, h: bodyH,
+        fontSize: Math.round(FONT_SIZES.body * textScale),
+        fontFace: 'Georgia',
+        italic: true,
+        color: COLORS.bodyText,
+        valign: 'top'
+    });
+
+    if (element.author) {
+        // markdeep-slides.js already writes the author div as "— <author>",
+        // so element.author (its trimmed textContent) needs no extra dash prefix.
+        const authorColor = element.authorStyle?.color || COLORS.primary;
+        slide.addText(element.author, {
+            x: bodyX, y: pos.y + height - authorHeight, w: bodyW, h: authorHeight,
+            fontSize: Math.round(FONT_SIZES.smallText * textScale),
+            fontFace: FONT_FACE,
+            bold: true,
+            align: 'right',
+            color: authorColor,
+            valign: 'bottom'
+        });
+    }
+}
+
+/**
+ * Render a :::stat::: KPI card — big centered number over a smaller label.
+ * Font sizes/colors come from the source elements' own computed style so the
+ * card follows the active markdeep-slides theme's accent color.
+ */
+function renderStatCard(slide, element, pptx, textScale = 1.0) {
+    const pos = element.position;
+    const x = Math.max(pos.x, 0.3);
+    const w = Math.min(pos.w, SLIDE_WIDTH - 0.6);
+
+    const numberFontSize = element.numberStyle?.fontSize
+        ? Math.round(element.numberStyle.fontSize * textScale)
+        : Math.round(FONT_SIZES.sectionTitle * 1.3 * textScale);
+    const numberColor = element.numberStyle?.color || COLORS.primary;
+    const numberY = pos.y + (element.numberOffsetY || 0);
+    const numberH = Math.max(element.numberHeight || pos.h, 0.5);
+
+    slide.addText(element.number || '', {
+        x, y: numberY, w, h: numberH,
+        fontSize: numberFontSize,
+        fontFace: FONT_FACE,
+        bold: true,
+        align: 'center',
+        color: numberColor,
+        valign: 'middle'
+    });
+
+    if (element.label) {
+        const labelFontSize = element.labelStyle?.fontSize
+            ? Math.round(element.labelStyle.fontSize * textScale)
+            : Math.round(FONT_SIZES.smallText * textScale);
+        const labelY = pos.y + (element.labelOffsetY || 0);
+        const labelH = Math.max(element.labelHeight || 0, 0.3);
+
+        slide.addText(element.label, {
+            x, y: labelY, w, h: labelH,
+            fontSize: labelFontSize,
+            fontFace: FONT_FACE,
+            align: 'center',
+            color: COLORS.bodyText,
+            valign: 'top'
+        });
+    }
 }
 
 // ============ Helper Functions ============

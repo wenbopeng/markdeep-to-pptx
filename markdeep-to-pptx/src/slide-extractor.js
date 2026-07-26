@@ -152,6 +152,23 @@ export async function extractSlides(htmlPath) {
                 return runs;
             }
 
+            // Like extractTextWithFormatting, but inserts a line break between top-level
+            // <p> children so multi-paragraph quote bodies don't run together.
+            function extractParagraphRuns(container) {
+                const paragraphs = container.querySelectorAll(':scope > p');
+                if (paragraphs.length === 0) {
+                    return extractTextWithFormatting(container);
+                }
+                const runs = [];
+                paragraphs.forEach((p, idx) => {
+                    runs.push(...extractTextWithFormatting(p));
+                    if (idx < paragraphs.length - 1) {
+                        runs.push({ text: '\n', options: {} });
+                    }
+                });
+                return runs;
+            }
+
             // Function to convert element position to PPTX coordinates
             function getPosition(el) {
                 const rect = el.getBoundingClientRect();
@@ -486,6 +503,48 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle quote cards (:::quote 作者::: from markdeep-slides)
+                if (el.classList.contains('quote-card')) {
+                    const bodyEl = el.querySelector('.quote-body');
+                    const authorEl = el.querySelector('.quote-author');
+                    const bodyPos = bodyEl ? getPosition(bodyEl) : null;
+                    const authorPos = authorEl ? getPosition(authorEl) : null;
+
+                    elements.push({
+                        type: 'quoteCard',
+                        text: bodyEl ? extractParagraphRuns(bodyEl) : extractTextWithFormatting(el),
+                        bodyOffsetY: bodyPos ? bodyPos.y - position.y : 0,
+                        author: authorEl ? authorEl.textContent.trim() : null,
+                        authorOffsetY: authorPos ? authorPos.y - position.y : null,
+                        authorHeight: authorPos ? authorPos.h : 0,
+                        authorStyle: authorEl ? getElementStyle(authorEl) : null,
+                        position
+                    });
+                    return;
+                }
+
+                // Handle stat/KPI cards (:::stat::: from markdeep-slides)
+                if (el.classList.contains('stat-card')) {
+                    const numberEl = el.querySelector('.stat-number');
+                    const labelEl = el.querySelector('.stat-label');
+                    const numberPos = numberEl ? getPosition(numberEl) : null;
+                    const labelPos = labelEl ? getPosition(labelEl) : null;
+
+                    elements.push({
+                        type: 'statCard',
+                        number: numberEl ? numberEl.textContent.trim() : '',
+                        numberOffsetY: numberPos ? numberPos.y - position.y : 0,
+                        numberHeight: numberPos ? numberPos.h : position.h,
+                        numberStyle: numberEl ? getElementStyle(numberEl) : null,
+                        label: labelEl ? labelEl.textContent.trim() : '',
+                        labelOffsetY: labelPos ? labelPos.y - position.y : 0,
+                        labelHeight: labelPos ? labelPos.h : 0,
+                        labelStyle: labelEl ? getElementStyle(labelEl) : null,
+                        position
+                    });
+                    return;
+                }
+
                 // Handle code blocks
                 if (tagName === 'PRE' || el.classList.contains('listing')) {
                     const codeEl = el.querySelector('code') || el;
@@ -705,6 +764,36 @@ export async function extractSlides(htmlPath) {
                     const chartId = `chart-${chartIdCounter++}`;
                     el.setAttribute('data-chart-id', chartId);
                     elements.push({ type: 'chart_pending', chartId, position });
+                    return;
+                }
+
+                // Handle :::columns::: cells — the current markdeep-slides.js column markup
+                // (columns-row > columns-cell), unlike the legacy column-left/column-right
+                // layout below. Children must be flagged inColumn so list/paragraph rendering
+                // picks the smaller in-card font and the card-padding Y-offset compensation.
+                if (tagName === 'DIV' && el.classList.contains('columns-cell')) {
+                    const cellComputed = window.getComputedStyle(el);
+                    const cellHasBg = cellComputed.backgroundColor !== 'rgba(0, 0, 0, 0)';
+                    const cellHasBorder = parseFloat(cellComputed.borderWidth) > 0;
+
+                    if (cellHasBg || cellHasBorder) {
+                        elements.push({
+                            type: 'shape',
+                            position,
+                            fill: cellHasBg ? rgbToHex(cellComputed.backgroundColor) : null,
+                            border: cellHasBorder ? {
+                                color: rgbToHex(cellComputed.borderColor),
+                                width: pxToPoints(cellComputed.borderWidth)
+                            } : null,
+                            borderRadius: parseFloat(cellComputed.borderRadius) || 0
+                        });
+                    }
+
+                    el.childNodes.forEach(child => {
+                        if (child.nodeType === Node.ELEMENT_NODE) {
+                            processElement(child, depth + 1, true); // mark as inside column
+                        }
+                    });
                     return;
                 }
 
