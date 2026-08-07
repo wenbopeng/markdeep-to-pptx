@@ -52,12 +52,10 @@ export async function extractSlides(htmlPath) {
 
     // Extract slide data
     const slideData = await page.evaluate(() => {
-        const PT_PER_PX = 0.75;
         const PX_PER_IN = 96;
 
         // Helper functions
         const pxToInch = (px) => px / PX_PER_IN;
-        const pxToPoints = (pxStr) => parseFloat(pxStr) * PT_PER_PX;
 
         const rgbToHex = (rgbStr) => {
             if (!rgbStr || rgbStr === 'rgba(0, 0, 0, 0)' || rgbStr === 'transparent') return 'FFFFFF';
@@ -96,11 +94,20 @@ export async function extractSlides(htmlPath) {
             const scaleX = slideWidthInches / parentRect.width;
             const scaleY = slideHeightInches / parentRect.height;
 
+            // Convert a computed-style px value (font-size, border-width, ...) to
+            // PPTX points using this slide's actual render-to-target scale, not a
+            // fixed 96dpi assumption. The extraction viewport is 1920x1080 — much
+            // wider than a "standard" 96dpi canvas — so a flat px*0.75 conversion
+            // overstated sizes by roughly 2x (e.g. :::stat::: numbers overflowing
+            // their card and overlapping the label below).
+            const pxToPoints = (pxStr) => parseFloat(pxStr) * scaleX * 72;
+
             // Extract slide classes for special handling
             const slideClasses = Array.from(slide.classList);
             const isSmallText = slideClasses.includes('small-text');
             const isTinyText = slideClasses.includes('tiny-text');
             const isH1TitleSlide = slideClasses.includes('h1-title-slide');
+            const isClosingSlide = slideClasses.includes('closing-slide');
             const isTwoColumn = slideClasses.includes('two-column');
 
             // Function to extract text with formatting
@@ -545,6 +552,20 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle closing/thank-you cards (:::closing::: from markdeep-slides)
+                if (el.classList.contains('closing-card')) {
+                    const titleEl = el.querySelector('.closing-title');
+                    const bodyEl = el.querySelector('.closing-body');
+
+                    elements.push({
+                        type: 'closingCard',
+                        title: titleEl ? titleEl.textContent.trim() : '',
+                        body: bodyEl ? extractParagraphRuns(bodyEl) : [],
+                        position
+                    });
+                    return;
+                }
+
                 // Handle code blocks
                 if (tagName === 'PRE' || el.classList.contains('listing')) {
                     const codeEl = el.querySelector('code') || el;
@@ -767,6 +788,25 @@ export async function extractSlides(htmlPath) {
                     return;
                 }
 
+                // Handle column card titles — produced both by :::listcolumn::: (each top-level
+                // list item becomes a card) and by :::columns::: nested-list-title promotion
+                // (see splitListIntoColumnCards / promoteNestedListTitles in markdeep-slides.js).
+                // This div holds only text/inline markup with no wrapping <p>, so without this
+                // branch it falls into the generic DIV handler below, which only recurses into
+                // element children and silently drops the title text entirely.
+                if (tagName === 'DIV' && el.classList.contains('columns-card-title')) {
+                    const text = el.textContent.trim();
+                    if (!text) return;
+
+                    elements.push({
+                        type: 'paragraph',
+                        text: extractTextWithFormatting(el),
+                        position,
+                        style: getElementStyle(el)
+                    });
+                    return;
+                }
+
                 // Handle :::columns::: cells — the current markdeep-slides.js column markup
                 // (columns-row > columns-cell), unlike the legacy column-left/column-right
                 // layout below. Children must be flagged inColumn so list/paragraph rendering
@@ -779,6 +819,14 @@ export async function extractSlides(htmlPath) {
                     if (cellHasBg || cellHasBorder) {
                         elements.push({
                             type: 'shape',
+                            // Flag this the same way the legacy column-left/column-right
+                            // background does: it's a column's own boundary, not content
+                            // inside one, so it can't carry inColumn:true — but the PPTX
+                            // generator's top-of-slide overlap check (computeTopColumnShiftMap
+                            // in pptx-generator.js) needs to recognize it as column-like too,
+                            // since it's pushed before this cell's children and is often the
+                            // very first element after the slide title.
+                            isColumnBackground: true,
                             position,
                             fill: cellHasBg ? rgbToHex(cellComputed.backgroundColor) : null,
                             border: cellHasBorder ? {
@@ -871,6 +919,7 @@ export async function extractSlides(htmlPath) {
                 elements,
                 metadata: {
                     isH1TitleSlide,
+                    isClosingSlide,
                     isTwoColumn,
                     isSmallText,
                     isTinyText,

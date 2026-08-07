@@ -33,6 +33,10 @@ const FONT_SIZES = {
 // Font face - use Microsoft YaHei for Chinese text
 const FONT_FACE = 'Microsoft YaHei';
 
+// Quote font - matches the KaiTi family markdeep-slides.css sets on .quote-card
+// ("KaiTi", "STKaiti", "Kaiti SC", "楷体", serif). PowerPoint resolves the CJK name directly.
+const QUOTE_FONT_FACE = '楷体';
+
 // Color palette based on Markdeep default theme
 const COLORS = {
     primary: '034295',          // Blue (from screenshots)
@@ -72,7 +76,10 @@ const NAV_BAR_HEIGHT = 0.35;
 
 // Top padding offset inside column backgrounds (HTML padding-top → PPTX gap compensation)
 const COLUMN_CONTENT_Y_OFFSET = 0.1;
-const TOP_COLUMN_MIN_Y = 1.06;
+// Visible clearance to keep between the title underline's bottom edge and the top of any
+// column content below it. The underline itself is only 0.025in thick, so without a real
+// buffer here column cards can end up touching (or visually reading as touching) the line.
+const TITLE_UNDERLINE_CLEARANCE = 0.15;
 
 /**
  * Create a PowerPoint presentation from extracted slide data
@@ -94,11 +101,12 @@ export async function generatePptx(slideData, outputPath, options = {}) {
 
         const isFirstSlide = slideInfo.index === 0;
         const isH1TitleSlide = slideInfo.metadata?.isH1TitleSlide;
+        const isClosingSlide = slideInfo.metadata?.isClosingSlide;
         const isTocSlide = slideInfo.elements.some(e =>
             e.type === 'heading' && e.text?.[0]?.text?.includes('目录'));
 
-        // Add navigation bar for content slides (not first slide or section slides)
-        if (!options.noNavbar && !isFirstSlide && !isH1TitleSlide && slideInfo.metadata?.navChapters) {
+        // Add navigation bar for content slides (not first slide, section slides, or the closing slide)
+        if (!options.noNavbar && !isFirstSlide && !isH1TitleSlide && !isClosingSlide && slideInfo.metadata?.navChapters) {
             renderNavBar(slide, slideInfo, pptx);
         }
 
@@ -107,14 +115,18 @@ export async function generatePptx(slideData, outputPath, options = {}) {
             renderTitleSlide(slide, slideInfo, pptx);
         } else if (isH1TitleSlide) {
             renderSectionSlide(slide, slideInfo, pptx);
+        } else if (isClosingSlide) {
+            renderClosingSlide(slide, slideInfo, pptx);
         } else if (isTocSlide) {
             renderTocSlide(slide, slideInfo, pptx);
         } else {
             await renderContentSlide(slide, slideInfo, pptx);
         }
 
-        // Add footer elements (chapter label, slide number, and progress bar)
-        addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide, pptx, slideData.slides.length, options);
+        // Add footer elements (chapter label, slide number, and progress bar).
+        // The closing slide should look as clean as the title/section slides, so it
+        // skips the chapter label and page number the same way they do.
+        addFooter(slide, slideInfo, isFirstSlide, isH1TitleSlide || isClosingSlide, pptx, slideData.slides.length, options);
     }
 
     await pptx.writeFile({ fileName: outputPath });
@@ -304,6 +316,53 @@ function renderTitleSlide(slide, slideInfo, pptx) {
 }
 
 /**
+ * Render closing slide (:::closing::: — a standalone "thank you" page).
+ * Mirrors renderTitleSlide's layout and fixed font sizes/colors (rather than
+ * the source page's actual computed .closing-title size) on purpose: the
+ * markdeep-slides theme's real rem-based font size doesn't translate 1:1 to
+ * PPTX points, and a whole-slide title should look consistent regardless of
+ * which markdeep-slides theme produced it — same reasoning as why
+ * renderTitleSlide/renderSectionSlide use fixed FONT_SIZES instead of reading
+ * computed styles (unlike the in-flow statCard/quoteCard cards, which do).
+ */
+function renderClosingSlide(slide, slideInfo, pptx) {
+    const cardElement = slideInfo.elements.find(e => e.type === 'closingCard');
+    if (!cardElement) return;
+
+    const centerY = SLIDE_HEIGHT / 2 - 0.8;
+
+    if (cardElement.title) {
+        slide.addText(cardElement.title, {
+            x: 0.5,
+            y: centerY,
+            w: SLIDE_WIDTH - 1,
+            h: 1,
+            fontSize: FONT_SIZES.titleSlideTitle,
+            fontFace: FONT_FACE,
+            color: COLORS.primary,
+            bold: true,
+            align: 'center',
+            valign: 'middle'
+        });
+    }
+
+    if (cardElement.body && cardElement.body.length > 0) {
+        const bodyText = extractPlainText(cardElement.body);
+        slide.addText(bodyText, {
+            x: 0.5,
+            y: centerY + 1.2,
+            w: SLIDE_WIDTH - 1,
+            h: 1,
+            fontSize: FONT_SIZES.titleSlideSubtitle,
+            fontFace: FONT_FACE,
+            color: COLORS.lightText,
+            align: 'center',
+            valign: 'top'
+        });
+    }
+}
+
+/**
  * Render section slide (H1 chapter transition)
  */
 function renderSectionSlide(slide, slideInfo, pptx) {
@@ -429,7 +488,10 @@ async function renderContentSlide(slide, slideInfo, pptx) {
     // Check if this slide has navbar (to adjust title position)
     const hasNavBar = slideInfo.metadata?.navChapters?.length > 0;
     const titleY = hasNavBar ? NAV_BAR_HEIGHT + 0.1 : 0.3;
-    const topColumnShiftMap = computeTopColumnShiftMap(slideInfo);
+    // underlineY/height mirror the title underline shape added below — kept in sync so the
+    // column-shift threshold always tracks where the line actually is for this slide's layout.
+    const underlineBottom = titleY + 0.55 + 0.025;
+    const topColumnShiftMap = computeTopColumnShiftMap(slideInfo, underlineBottom + TITLE_UNDERLINE_CLEARANCE);
 
     // Add slide title using extracted position
     if (titleElement) {
@@ -972,8 +1034,7 @@ function renderBlockquote(slide, element, pptx, textScale = 1.0) {
         w: Math.min(pos.w, SLIDE_WIDTH - 1) - 0.15,
         h: height,
         fontSize: Math.round(FONT_SIZES.body * textScale),
-        fontFace: 'Georgia',
-        italic: true,
+        fontFace: QUOTE_FONT_FACE,
         color: COLORS.lightText,
         valign: 'top'
     });
@@ -981,8 +1042,9 @@ function renderBlockquote(slide, element, pptx, textScale = 1.0) {
 
 /**
  * Render a :::quote 作者::: card — light card background, left accent bar,
- * italic body, and a right-aligned author line (colored with the source
- * element's own computed color, so it follows the active markdeep-slides theme).
+ * KaiTi body (matching .quote-card's font-family in markdeep-slides.css), and a
+ * right-aligned author line (colored with the source element's own computed
+ * color, so it follows the active markdeep-slides theme).
  */
 function renderQuoteCard(slide, element, pptx, textScale = 1.0) {
     const pos = element.position;
@@ -1012,8 +1074,7 @@ function renderQuoteCard(slide, element, pptx, textScale = 1.0) {
     slide.addText(extractPlainText(element.text), {
         x: bodyX, y: bodyY, w: bodyW, h: bodyH,
         fontSize: Math.round(FONT_SIZES.body * textScale),
-        fontFace: 'Georgia',
-        italic: true,
+        fontFace: QUOTE_FONT_FACE,
         color: COLORS.bodyText,
         valign: 'top'
     });
@@ -1116,41 +1177,34 @@ function formatTextRuns(runs, defaultSize) {
     });
 }
 
-function computeTopColumnShiftMap(slideInfo) {
+function computeTopColumnShiftMap(slideInfo, minY) {
+    // Whatever renders first below the slide title — a column card, a mermaid/chart
+    // screenshot, a plain list, ... — must not sit closer to the title's underline than
+    // `minY`. Originally this only looked at column-flagged content (inColumn/
+    // isColumnBackground), but any element type can be the first thing on a slide, so the
+    // check now looks at all non-title content uniformly. When the leading edge is too high,
+    // the whole content stack is shifted down by the same delta so relative spacing between
+    // elements is preserved. shiftY is clamped to >= 0, so this is a no-op on slides that
+    // already clear the line.
     const shiftMap = new Map();
-    if (!slideInfo.metadata?.isSmallText && !slideInfo.metadata?.isTinyText) return shiftMap;
 
-    const contentStartIndex = slideInfo.elements.findIndex(
-        (element) => !(element.type === 'heading' && element.level <= 2)
-    );
-    if (contentStartIndex < 0) return shiftMap;
-
-    const firstContentElement = slideInfo.elements[contentStartIndex];
-    if (!isTopColumnElement(firstContentElement)) return shiftMap;
-
-    const topColumnIndices = [];
-    for (let i = contentStartIndex; i < slideInfo.elements.length; i++) {
-        const element = slideInfo.elements[i];
-        if (!isTopColumnElement(element)) break;
-        topColumnIndices.push(i);
-    }
-
-    if (topColumnIndices.length === 0) return shiftMap;
+    const contentIndices = [];
+    slideInfo.elements.forEach((element, index) => {
+        if (element.type === 'heading' && element.level <= 2) return;
+        contentIndices.push(index);
+    });
+    if (contentIndices.length === 0) return shiftMap;
 
     const topY = Math.min(
-        ...topColumnIndices.map(index => slideInfo.elements[index].position?.y ?? Number.POSITIVE_INFINITY)
+        ...contentIndices.map(index => slideInfo.elements[index].position?.y ?? Number.POSITIVE_INFINITY)
     );
     if (!Number.isFinite(topY)) return shiftMap;
 
-    const shiftY = Math.max(0, TOP_COLUMN_MIN_Y - topY);
+    const shiftY = Math.max(0, minY - topY);
     if (shiftY <= 0) return shiftMap;
 
-    topColumnIndices.forEach(index => shiftMap.set(index, shiftY));
+    contentIndices.forEach(index => shiftMap.set(index, shiftY));
     return shiftMap;
-}
-
-function isTopColumnElement(element) {
-    return !!(element?.position?.inColumn || element?.isColumnBackground);
 }
 
 function adjustElementY(element, shiftY) {
